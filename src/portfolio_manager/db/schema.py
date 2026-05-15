@@ -363,4 +363,56 @@ MIGRATIONS: list[tuple[int, str]] = [
         CREATE INDEX IF NOT EXISTS idx_liabilities_active ON liabilities(is_active);
         """,
     ),
+    (
+        6,
+        """
+        -- Account groups (e.g. Household, Retirement, Trading) and accounts
+        -- (e.g. an IBKR account, a checking account at Chase). Holdings can be assigned
+        -- to an account, and rows with a NULL account_id are "Unassigned".
+        CREATE TABLE IF NOT EXISTS account_groups (
+            group_id      VARCHAR PRIMARY KEY,
+            name          VARCHAR NOT NULL,
+            kind          VARCHAR NOT NULL DEFAULT 'household',   -- household | person | institution | strategy | other
+            color         VARCHAR,                                 -- optional hex (#RRGGBB) for UI
+            notes         VARCHAR,
+            sort_order    INTEGER DEFAULT 0,
+            created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_active     BOOLEAN DEFAULT TRUE
+        );
+
+        CREATE TABLE IF NOT EXISTS accounts (
+            account_id    VARCHAR PRIMARY KEY,
+            group_id      VARCHAR,                                 -- nullable: account need not belong to a group
+            name          VARCHAR NOT NULL,
+            broker        VARCHAR,                                 -- 'Fidelity', 'IBKR', 'Chase', ...
+            account_type  VARCHAR NOT NULL DEFAULT 'other',        -- taxable | ira | roth | k401 | hsa | checking | savings | mortgage | other
+            currency      VARCHAR,                                 -- declared currency (informational, holdings keep their own)
+            country       VARCHAR,
+            notes         VARCHAR,
+            sort_order    INTEGER DEFAULT 0,
+            created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_active     BOOLEAN DEFAULT TRUE
+        );
+        CREATE INDEX IF NOT EXISTS idx_accounts_group  ON accounts(group_id);
+        CREATE INDEX IF NOT EXISTS idx_accounts_active ON accounts(is_active);
+
+        ALTER TABLE assets        ADD COLUMN IF NOT EXISTS account_id VARCHAR;
+        ALTER TABLE cash_holdings ADD COLUMN IF NOT EXISTS account_id VARCHAR;
+        ALTER TABLE liabilities   ADD COLUMN IF NOT EXISTS account_id VARCHAR;
+
+        CREATE INDEX IF NOT EXISTS idx_assets_account  ON assets(account_id);
+        CREATE INDEX IF NOT EXISTS idx_cash_account    ON cash_holdings(account_id);
+        CREATE INDEX IF NOT EXISTS idx_liab_account    ON liabilities(account_id);
+
+        -- App settings: key/value store for user-editable settings that should not
+        -- require a config-file edit + restart. Values are JSON-encoded strings.
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key           VARCHAR PRIMARY KEY,
+            value         VARCHAR NOT NULL,                        -- JSON-encoded
+            updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """,
+    ),
 ]

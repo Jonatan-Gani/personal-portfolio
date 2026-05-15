@@ -35,6 +35,7 @@ class Asset(BaseModel):
     country: OptCountryStr = None
     sector: Optional[str] = None
     price_provider: Optional[str] = None
+    account_id: Optional[str] = None
     notes: Optional[str] = None
     tags: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=utcnow)
@@ -50,6 +51,7 @@ class Liability(BaseModel):
     liability_type: LiabilityType
     currency: CurrencyStr
     interest_rate: Optional[float] = None  # APR as decimal (0.045 = 4.5%)
+    account_id: Optional[str] = None
     notes: Optional[str] = None
     tags: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=utcnow)
@@ -63,8 +65,38 @@ class CashHolding(BaseModel):
     account_name: str
     currency: CurrencyStr
     country: OptCountryStr = None
+    account_id: Optional[str] = None
     notes: Optional[str] = None
     tags: list[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
+    is_active: bool = True
+
+
+class AccountGroup(BaseModel):
+    """A grouping of accounts — e.g. "Household", "Retirement", "Strategy A"."""
+    group_id: str = Field(default_factory=_new_id)
+    name: str
+    kind: str = "household"  # household | person | institution | strategy | other
+    color: Optional[str] = None
+    notes: Optional[str] = None
+    sort_order: int = 0
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
+    is_active: bool = True
+
+
+class Account(BaseModel):
+    """A discrete account at a broker / bank / institution that holds positions."""
+    account_id: str = Field(default_factory=_new_id)
+    group_id: Optional[str] = None
+    name: str
+    broker: Optional[str] = None
+    account_type: str = "other"  # taxable | ira | roth | k401 | hsa | checking | savings | mortgage | other
+    currency: Optional[str] = None
+    country: OptCountryStr = None
+    notes: Optional[str] = None
+    sort_order: int = 0
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
     is_active: bool = True

@@ -16,8 +16,8 @@ class AssetRepository:
             """
             INSERT INTO assets (
                 asset_id, symbol, name, instrument_type, asset_class, currency, country, sector,
-                price_provider, notes, tags, created_at, updated_at, is_active
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                price_provider, account_id, notes, tags, created_at, updated_at, is_active
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT (asset_id) DO UPDATE SET
                 symbol = EXCLUDED.symbol,
                 name = EXCLUDED.name,
@@ -27,6 +27,7 @@ class AssetRepository:
                 country = EXCLUDED.country,
                 sector = EXCLUDED.sector,
                 price_provider = EXCLUDED.price_provider,
+                account_id = EXCLUDED.account_id,
                 notes = EXCLUDED.notes,
                 tags = EXCLUDED.tags,
                 updated_at = EXCLUDED.updated_at,
@@ -35,7 +36,7 @@ class AssetRepository:
             [
                 asset.asset_id, asset.symbol, asset.name, asset.instrument_type.value,
                 asset.asset_class.value, asset.currency, asset.country, asset.sector,
-                asset.price_provider, asset.notes, asset.tags,
+                asset.price_provider, asset.account_id, asset.notes, asset.tags,
                 asset.created_at, asset.updated_at, asset.is_active,
             ],
         )

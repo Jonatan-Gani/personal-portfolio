@@ -15,14 +15,15 @@ class LiabilityRepository:
         self.db.execute(
             """
             INSERT INTO liabilities (
-                liability_id, name, liability_type, currency, interest_rate,
+                liability_id, name, liability_type, currency, interest_rate, account_id,
                 notes, tags, created_at, updated_at, is_active
-            ) VALUES (?,?,?,?,?,?,?,?,?,?)
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT (liability_id) DO UPDATE SET
                 name = EXCLUDED.name,
                 liability_type = EXCLUDED.liability_type,
                 currency = EXCLUDED.currency,
                 interest_rate = EXCLUDED.interest_rate,
+                account_id = EXCLUDED.account_id,
                 notes = EXCLUDED.notes,
                 tags = EXCLUDED.tags,
                 updated_at = EXCLUDED.updated_at,
@@ -30,7 +31,7 @@ class LiabilityRepository:
             """,
             [
                 liability.liability_id, liability.name, liability.liability_type.value,
-                liability.currency, liability.interest_rate,
+                liability.currency, liability.interest_rate, liability.account_id,
                 liability.notes, liability.tags, liability.created_at, liability.updated_at,
                 liability.is_active,
             ],

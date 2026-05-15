@@ -1,3 +1,5 @@
+from .accounts import AccountGroupRepository, AccountRepository
+from .app_settings import AppSettingsRepository
 from .assets import AssetRepository
 from .benchmarks import BenchmarkRepository
 from .cash import CashRepository
@@ -9,6 +11,9 @@ from .targets import TargetAllocationRepository
 from .transactions import TransactionRepository
 
 __all__ = [
+    "AccountGroupRepository",
+    "AccountRepository",
+    "AppSettingsRepository",
     "AssetRepository",
     "BenchmarkRepository",
     "CashRepository",

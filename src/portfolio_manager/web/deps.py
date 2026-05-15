@@ -6,6 +6,9 @@ from ..config import AppConfig
 from ..db.connection import Database
 from ..providers.registry import build_fx_provider, build_price_provider
 from ..repositories import (
+    AccountGroupRepository,
+    AccountRepository,
+    AppSettingsRepository,
     AssetRepository,
     BenchmarkRepository,
     CashRepository,
@@ -58,6 +61,9 @@ class Container:
     benchmarks_repo: BenchmarkRepository
     manual_prices_repo: ManualPriceOverrideRepository
     targets_repo: TargetAllocationRepository
+    accounts_repo: AccountRepository
+    account_groups_repo: AccountGroupRepository
+    app_settings_repo: AppSettingsRepository
     price_cache: PriceCache
 
 
@@ -73,6 +79,9 @@ def build_container(config: AppConfig, db: Database) -> Container:
     bench_repo = BenchmarkRepository(db)
     mp_repo = ManualPriceOverrideRepository(db)
     targets_repo = TargetAllocationRepository(db)
+    accounts_repo = AccountRepository(db)
+    account_groups_repo = AccountGroupRepository(db)
+    app_settings_repo = AppSettingsRepository(db)
     fx_cache = FXRateCache(db)
     price_cache = PriceCache(db)
 
@@ -130,5 +139,8 @@ def build_container(config: AppConfig, db: Database) -> Container:
         benchmarks_repo=bench_repo,
         manual_prices_repo=mp_repo,
         targets_repo=targets_repo,
+        accounts_repo=accounts_repo,
+        account_groups_repo=account_groups_repo,
+        app_settings_repo=app_settings_repo,
         price_cache=price_cache,
     )
