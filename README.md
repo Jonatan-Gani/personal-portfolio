@@ -23,17 +23,24 @@ portfolio web      # http://localhost:8000
 
 ### Windows (cmd.exe)
 
+If your environment blocks `.bat` files (so `activate.bat` is off-limits),
+skip activation entirely and call the venv's tools by their full path
+inside `.venv\Scripts\`:
+
 ```bat
 py -3 -m venv .venv
-.venv\Scripts\activate.bat
-pip install -e ".[dev]"
+.venv\Scripts\python.exe -m pip install -e ".[dev]"
 
 copy config\config.example.yaml config\config.yaml
 copy .env.example .env
 
-portfolio init-db
-portfolio web
+.venv\Scripts\portfolio.exe init-db
+.venv\Scripts\portfolio.exe web
 ```
+
+If `.bat` activation *is* allowed, the short form works too — run
+`.venv\Scripts\activate.bat` once, then just `portfolio init-db` /
+`portfolio web` for the rest of the session.
 
 ### Windows (PowerShell)
 
