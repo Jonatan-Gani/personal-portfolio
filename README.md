@@ -7,6 +7,8 @@ locally in DuckDB.
 
 ## Quick start
 
+### macOS / Linux
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
@@ -18,6 +20,37 @@ cp .env.example .env
 portfolio init-db
 portfolio web      # http://localhost:8000
 ```
+
+### Windows (cmd.exe)
+
+```bat
+py -3 -m venv .venv
+.venv\Scripts\activate.bat
+pip install -e ".[dev]"
+
+copy config\config.example.yaml config\config.yaml
+copy .env.example .env
+
+portfolio init-db
+portfolio web
+```
+
+### Windows (PowerShell)
+
+```powershell
+py -3 -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+
+Copy-Item config\config.example.yaml config\config.yaml
+Copy-Item .env.example .env
+
+portfolio init-db
+portfolio web
+```
+
+If PowerShell blocks the activation script, allow it for the current user once:
+`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 
 CLI ops:
 
