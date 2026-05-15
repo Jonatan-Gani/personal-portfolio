@@ -27,6 +27,7 @@
     {% if report.untargeted_share > 0.001 %}
       · untargeted: <span class="mono">{{ "{:.1%}".format(report.untargeted_share) }}</span>
     {% endif %}
+    <span class="info-tip" title="Targets in a dimension should sum to 100%. Anything 'untargeted' is the portion not covered by any target — typically meaning you haven't set a target for one or more buckets.">i</span>
   </span>
 </form>
 
@@ -43,8 +44,8 @@
         <th>Bucket</th>
         <th class="num">Target</th>
         <th class="num">Current</th>
-        <th>Drift</th>
-        <th class="num">Δ {{ base_currency }}</th>
+        <th>Drift <span class="info-tip" title="Current weight − target weight. Bars to the right (red) mean you're overweight that bucket; bars to the left (blue) mean underweight.">i</span></th>
+        <th class="num">Δ {{ base_currency }} <span class="info-tip" title="How many base-currency units you'd need to add (positive) or trim (negative) to hit the target exactly.">i</span></th>
         <th></th>
       </tr>
     </thead>

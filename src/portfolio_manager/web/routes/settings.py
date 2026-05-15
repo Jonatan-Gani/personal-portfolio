@@ -164,6 +164,14 @@ def update_ui(
     return RedirectResponse("/settings", status_code=303)
 
 
+@router.post("/settings/toggle-privacy")
+def toggle_privacy(request: Request, next: str = Form("/")):
+    c = request.app.state.container
+    current = bool(c.app_settings_repo.get("ui.privacy_mode", False))
+    c.app_settings_repo.set("ui.privacy_mode", not current)
+    return RedirectResponse(next or "/", status_code=303)
+
+
 @router.get("/settings/download-backup")
 def download_backup(request: Request):
     c = request.app.state.container
