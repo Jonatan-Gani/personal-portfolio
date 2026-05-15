@@ -6,6 +6,8 @@ from pathlib import Path
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse
 
+from ...providers.registry import _FX_MODULES, _PRICE_MODULES
+
 router = APIRouter()
 
 
@@ -101,8 +103,8 @@ def settings_page(request: Request):
             "common_currencies": ["USD", "EUR", "GBP", "SEK", "ILS", "CHF", "JPY", "CAD", "AUD", "CNY"],
             "themes": ["light", "dark", "system"],
             "densities": ["comfortable", "compact"],
-            "fx_providers": ["ecb", "mock"],
-            "price_providers": ["yfinance", "mock"],
+            "fx_providers": sorted(_FX_MODULES),
+            "price_providers": sorted(_PRICE_MODULES),
             "watchlist_text": watchlist_text,
         },
     )
