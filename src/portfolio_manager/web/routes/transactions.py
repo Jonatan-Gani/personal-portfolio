@@ -5,9 +5,15 @@ from datetime import date
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
-from ...domain.enums import PositionKind, TransactionType
+from ...domain.enums import (
+    AssetClass,
+    InstrumentType,
+    LiabilityType,
+    PositionKind,
+    TransactionType,
+)
 from ...domain.exceptions import NotFoundError
-from ...domain.models import Transaction
+from ...domain.models import Asset, CashHolding, Liability, Transaction
 
 router = APIRouter()
 
@@ -30,6 +36,56 @@ def _split_entity(entity: str) -> tuple[PositionKind, str]:
     if not eid:
         raise HTTPException(400, "entity id missing")
     return kind, eid
+
+
+def _create_entity_stub(
+    c,
+    *,
+    new_kind: str | None,
+    new_name: str | None,
+    new_symbol: str | None,
+    new_account_id: str | None,
+    currency: str | None,
+) -> tuple[PositionKind, str, str]:
+    """Create a minimal Asset/Cash/Liability so a transaction can reference it.
+
+    Returns (kind, entity_id, currency). The user can fill in classification,
+    pricing-provider, etc. later on the entity's own page.
+    """
+    if not new_kind:
+        raise HTTPException(400, "kind is required when creating a new position")
+    if not new_name or not new_name.strip():
+        raise HTTPException(400, "name is required when creating a new position")
+    if not currency or not currency.strip():
+        raise HTTPException(400, "currency is required when creating a new position")
+    try:
+        kind = PositionKind(new_kind)
+    except ValueError as e:
+        raise HTTPException(400, f"unknown position kind {new_kind!r}") from e
+
+    name = new_name.strip()
+    ccy = currency.strip().upper()
+    acct = (new_account_id or "").strip() or None
+
+    if kind is PositionKind.ASSET:
+        sym = (new_symbol or "").strip().upper() or None
+        a = c.portfolio.add_asset(Asset(
+            name=name, symbol=sym, currency=ccy, account_id=acct,
+            instrument_type=InstrumentType.OTHER, asset_class=AssetClass.OTHER,
+        ))
+        return kind, a.asset_id, a.currency
+    if kind is PositionKind.CASH:
+        ca = c.portfolio.add_cash(CashHolding(
+            account_name=name, currency=ccy, account_id=acct,
+        ))
+        return kind, ca.cash_id, ca.currency
+    if kind is PositionKind.LIABILITY:
+        lia = c.portfolio.add_liability(Liability(
+            name=name, currency=ccy, account_id=acct,
+            liability_type=LiabilityType.OTHER,
+        ))
+        return kind, lia.liability_id, lia.currency
+    raise HTTPException(400, f"cannot create entity of kind {kind!r}")
 
 
 def _entity_index(c) -> dict[str, dict]:
@@ -128,25 +184,40 @@ def create_transaction(
     request: Request,
     transaction_date: str = Form(...),
     transaction_type: str = Form(...),
-    entity: str = Form(...),                       # friendly: '<kind>:<id>'
+    entity: str = Form(...),                       # '<kind>:<id>' or 'new'
     quantity: float | None = Form(None),
     price: float | None = Form(None),
     amount: float | None = Form(None),             # may be derived server-side
     currency: str | None = Form(None),             # may be inherited from entity
     fees: float = Form(0.0),
     notes: str | None = Form(None),
+    # New-position fields — only used when entity == "new".
+    new_kind: str | None = Form(None),
+    new_name: str | None = Form(None),
+    new_symbol: str | None = Form(None),
+    new_account_id: str | None = Form(None),
 ):
     c = request.app.state.container
-    kind, eid = _split_entity(entity)
     ttype = TransactionType(transaction_type)
 
-    # Auto-inherit currency from the entity if the form didn't supply one.
-    if not currency:
-        idx = _entity_index(c)
-        e = idx.get(f"{kind.value}:{eid}")
-        if not e:
-            raise HTTPException(400, f"unknown entity {entity!r}")
-        currency = e["currency"]
+    if entity == "new":
+        kind, eid, currency = _create_entity_stub(
+            c,
+            new_kind=new_kind,
+            new_name=new_name,
+            new_symbol=new_symbol,
+            new_account_id=new_account_id,
+            currency=currency,
+        )
+    else:
+        kind, eid = _split_entity(entity)
+        # Auto-inherit currency from the entity if the form didn't supply one.
+        if not currency:
+            idx = _entity_index(c)
+            e = idx.get(f"{kind.value}:{eid}")
+            if not e:
+                raise HTTPException(400, f"unknown entity {entity!r}")
+            currency = e["currency"]
 
     # Derive amount for trade-style transactions if the user didn't override it.
     # Buy/Sell: |amount| = |qty * price| + fees. Sell stays positive (it's the
