@@ -15,20 +15,21 @@ class CashRepository:
         self.db.execute(
             """
             INSERT INTO cash_holdings (
-                cash_id, account_name, currency, country, notes, tags,
+                cash_id, account_name, currency, country, account_id, notes, tags,
                 created_at, updated_at, is_active
-            ) VALUES (?,?,?,?,?,?,?,?,?)
+            ) VALUES (?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT (cash_id) DO UPDATE SET
                 account_name = EXCLUDED.account_name,
                 currency = EXCLUDED.currency,
                 country = EXCLUDED.country,
+                account_id = EXCLUDED.account_id,
                 notes = EXCLUDED.notes,
                 tags = EXCLUDED.tags,
                 updated_at = EXCLUDED.updated_at,
                 is_active = EXCLUDED.is_active
             """,
             [
-                cash.cash_id, cash.account_name, cash.currency, cash.country,
+                cash.cash_id, cash.account_name, cash.currency, cash.country, cash.account_id,
                 cash.notes, cash.tags, cash.created_at, cash.updated_at, cash.is_active,
             ],
         )

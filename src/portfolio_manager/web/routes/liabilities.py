@@ -40,6 +40,7 @@ def list_liabilities(request: Request):
         )
         if row:
             debts_total = float(row[0] or 0)
+    accounts = c.accounts_repo.list_active()
     return request.app.state.templates.TemplateResponse(
         request,
         "liabilities.html",
@@ -49,6 +50,7 @@ def list_liabilities(request: Request):
             "principals": principals,
             "liability_types": [t.value for t in LiabilityType],
             "debts_total": debts_total,
+            "accounts": accounts,
         },
     )
 
@@ -61,15 +63,21 @@ def create_liability(
     currency: str = Form(...),
     opening_balance: float = Form(...),
     interest_rate: float | None = Form(None),
+    interest_rate_pct: float | None = Form(None),
+    account_id: str | None = Form(None),
     notes: str | None = Form(None),
     tags: str | None = Form(None),
 ):
     c = request.app.state.container
+    # Accept either the legacy decimal field or the new APR-percent field.
+    if interest_rate_pct is not None:
+        interest_rate = interest_rate_pct / 100.0
     liab = Liability(
         name=name,
         liability_type=LiabilityType(liability_type),
         currency=currency,
         interest_rate=interest_rate,
+        account_id=account_id or None,
         notes=notes,
         tags=[t.strip() for t in (tags or "").split(",") if t.strip()],
     )
@@ -95,6 +103,8 @@ def update_liability(
     liability_type: str = Form(...),
     currency: str = Form(...),
     interest_rate: float | None = Form(None),
+    interest_rate_pct: float | None = Form(None),
+    account_id: str | None = Form(None),
     notes: str | None = Form(None),
     tags: str | None = Form(None),
 ):
@@ -103,10 +113,13 @@ def update_liability(
         existing = c.portfolio.liabilities.get(liability_id)
     except NotFoundError as e:
         raise HTTPException(404, str(e)) from e
+    if interest_rate_pct is not None:
+        interest_rate = interest_rate_pct / 100.0
     existing.name = name
     existing.liability_type = LiabilityType(liability_type)
     existing.currency = currency
     existing.interest_rate = interest_rate
+    existing.account_id = account_id or None
     existing.notes = notes
     existing.tags = [t.strip() for t in (tags or "").split(",") if t.strip()]
     c.portfolio.update_liability(existing)

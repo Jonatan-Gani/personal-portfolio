@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% block title %}Accounts{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div class="titles">
+    <span class="eyebrow">Organisation</span>
+    <h1>Accounts &amp; groups</h1>
+  </div>
+  <p class="lede">Define accounts (brokerages, banks, retirement plans, ...) and group them however suits you —
+    "Household", "Joint", "Strategy A". Each asset, cash account, or liability can belong to one account.</p>
+</div>
+
+<div class="grid-2col" style="grid-template-columns: 1fr 1fr">
+  <details class="drawer">
+    <summary>+ Add account group</summary>
+    <div class="drawer-body">
+      <form method="post" action="/accounts/groups" class="field-row">
+        <label class="field span-2">Name <input name="name" required placeholder="e.g. Household"></label>
+        <label class="field">Kind
+          <select name="kind">
+            {% for k in group_kinds %}<option value="{{ k }}">{{ k | humanize }}</option>{% endfor %}
+          </select>
+        </label>
+        <label class="field">Colour
+          <input name="color" type="color" value="#3B82F6">
+          <span class="hint">Used as a row marker. Optional.</span>
+        </label>
+        <label class="field span-4">Notes <input name="notes" placeholder="optional"></label>
+        <button class="btn btn-primary span-4" style="justify-self:start">Add group</button>
+      </form>
+    </div>
+  </details>
+
+  <details class="drawer">
+    <summary>+ Add account</summary>
+    <div class="drawer-body">
+      <form method="post" action="/accounts" class="field-row">
+        <label class="field span-2">Name <input name="name" required placeholder="e.g. IBKR taxable"></label>
+        <label class="field">Group
+          <select name="group_id">
+            <option value="">— none —</option>
+            {% for g in groups %}{% if g.is_active %}<option value="{{ g.group_id }}">{{ g.name }}</option>{% endif %}{% endfor %}
+          </select>
+        </label>
+        <label class="field">Type
+          <select name="account_type">
+            {% for t in account_types %}<option value="{{ t }}" {% if t == 'taxable' %}selected{% endif %}>{{ t | humanize_account_type }}</option>{% endfor %}
+          </select>
+        </label>
+        <label class="field">Broker <input name="broker" placeholder="e.g. Interactive Brokers"></label>
+        <label class="field">Currency <input name="currency" maxlength="3" list="ccy-list" placeholder="USD"></label>
+        <label class="field">Country <input name="country" maxlength="2" list="country-list"></label>
+        <label class="field span-4">Notes <input name="notes" placeholder="optional"></label>
+        <button class="btn btn-primary span-4" style="justify-self:start">Add account</button>
+      </form>
+    </div>
+  </details>
+</div>
+
+{% macro render_account_row(a) %}
+  {% set n = counts.get(a.account_id, {'asset':0,'cash':0,'liability':0}) %}
+  <tr class="{{ 'inactive' if not a.is_active }}">
+    <td>
+      <strong>{{ a.name }}</strong>
+      {% if a.broker %}<div class="meta faint">{{ a.broker }}</div>{% endif %}
+    </td>
+    <td><span class="pill">{{ a.account_type | humanize_account_type }}</span></td>
+    <td class="mono">{{ a.currency or '—' }}</td>
+    <td class="mono faint">{{ a.country or '—' }}</td>
+    <td class="num">
+      {{ n.asset }} <span class="faint">a</span>
+      · {{ n.cash }} <span class="faint">c</span>
+      · {{ n.liability }} <span class="faint">l</span>
+    </td>
+    <td class="num"><strong>{{ "{:,.0f}".format(values.get(a.account_id, 0)) }}</strong> <span class="faint">{{ base_currency }}</span></td>
+    <td>
+      <div class="row-actions">
+        <details class="row-edit">
+          <summary>Edit</summary>
+          <div class="row-edit-body">
+            <form method="post" action="/accounts/{{ a.account_id }}/update" class="field-row">
+              <label class="field span-2">Name <input name="name" value="{{ a.name }}" required></label>
+              <label class="field">Group
+                <select name="group_id">
+                  <option value="" {% if not a.group_id %}selected{% endif %}>— none —</option>
+                  {% for g in groups %}{% if g.is_active %}<option value="{{ g.group_id }}" {% if g.group_id == a.group_id %}selected{% endif %}>{{ g.name }}</option>{% endif %}{% endfor %}
+                </select>
+              </label>
+              <label class="field">Type
+                <select name="account_type">
+                  {% for t in account_types %}<option value="{{ t }}" {% if t == a.account_type %}selected{% endif %}>{{ t | humanize_account_type }}</option>{% endfor %}
+                </select>
+              </label>
+              <label class="field">Broker <input name="broker" value="{{ a.broker or '' }}"></label>
+              <label class="field">Currency <input name="currency" maxlength="3" list="ccy-list" value="{{ a.currency or '' }}"></label>
+              <label class="field">Country <input name="country" maxlength="2" list="country-list" value="{{ a.country or '' }}"></label>
+              <label class="field span-4">Notes <input name="notes" value="{{ a.notes or '' }}"></label>
+              <div class="span-4 row-actions"><button class="btn btn-primary">Save</button></div>
+            </form>
+          </div>
+        </details>
+        {% if a.is_active %}
+          <form method="post" action="/accounts/{{ a.account_id }}/delete" class="inline"><button class="btn btn-sm btn-danger">Deactivate</button></form>
+        {% else %}
+          <form method="post" action="/accounts/{{ a.account_id }}/reactivate" class="inline"><button class="btn btn-sm">Reactivate</button></form>
+          <form method="post" action="/accounts/{{ a.account_id }}/delete?hard=true" class="inline"
+                onsubmit="return confirm('Hard-delete this account? Holdings will become Unassigned.')">
+            <button class="btn btn-sm btn-danger">Hard delete</button>
+          </form>
+        {% endif %}
+      </div>
+    </td>
+  </tr>
+{% endmacro %}
+
+{% if not groups and not by_group %}
+  <div class="empty">
+    <h2>No accounts or groups yet</h2>
+    <p>Add your first group to start organising holdings — e.g. "Household" or "Retirement".
+      Holdings without an account remain "Unassigned" and continue to roll up to portfolio totals.</p>
+  </div>
+{% endif %}
+
+{% for g in groups %}
+  {% if g.is_active or by_group.get(g.group_id) %}
+  <section class="card section">
+    <div class="card-header">
+      <div style="display:flex;align-items:center;gap:.6rem">
+        {% if g.color %}<span style="width:10px;height:10px;border-radius:3px;background:{{ g.color }}"></span>{% endif %}
+        <h3>{{ g.name }}</h3>
+        <span class="pill faint">{{ g.kind | humanize }}</span>
+        {% if not g.is_active %}<span class="pill inactive">inactive</span>{% endif %}
+      </div>
+      <div class="row-actions">
+        <span class="muted" style="font-size:12px">
+          {{ group_totals.get(g.group_id, {}).get('n_accounts', 0) }} accounts ·
+          <strong>{{ "{:,.0f}".format(group_totals.get(g.group_id, {}).get('value', 0)) }}</strong>
+          {{ base_currency }}
+        </span>
+        <details class="row-edit">
+          <summary>Edit group</summary>
+          <div class="row-edit-body">
+            <form method="post" action="/accounts/groups/{{ g.group_id }}/update" class="field-row">
+              <label class="field span-2">Name <input name="name" value="{{ g.name }}" required></label>
+              <label class="field">Kind
+                <select name="kind">
+                  {% for k in group_kinds %}<option value="{{ k }}" {% if k == g.kind %}selected{% endif %}>{{ k | humanize }}</option>{% endfor %}
+                </select>
+              </label>
+              <label class="field">Colour <input name="color" type="color" value="{{ g.color or '#3B82F6' }}"></label>
+              <label class="field span-4">Notes <input name="notes" value="{{ g.notes or '' }}"></label>
+              <div class="span-4 row-actions">
+                <button class="btn btn-primary">Save</button>
+                <form method="post" action="/accounts/groups/{{ g.group_id }}/delete?hard=true" class="inline"
+                      onsubmit="return confirm('Hard-delete this group? Accounts inside become ungrouped.')">
+                  <button class="btn btn-sm btn-danger">Hard delete</button>
+                </form>
+              </div>
+            </form>
+          </div>
+        </details>
+      </div>
+    </div>
+    <div class="card-body flush">
+      <table class="data">
+        <thead>
+          <tr>
+            <th>Account</th><th>Type</th><th>Ccy</th><th>Country</th>
+            <th class="num">Holdings</th><th class="num">Net value</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in by_group.get(g.group_id, []) %}
+            {{ render_account_row(a) }}
+          {% else %}
+            <tr><td colspan="7" class="table-empty">No accounts in this group yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+{% endfor %}
+
+{% if by_group.get(None) %}
+<section class="card section">
+  <div class="card-header">
+    <h3>Ungrouped accounts</h3>
+  </div>
+  <div class="card-body flush">
+    <table class="data">
+      <thead>
+        <tr><th>Account</th><th>Type</th><th>Ccy</th><th>Country</th><th class="num">Holdings</th><th class="num">Net value</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for a in by_group.get(None, []) %}
+          {{ render_account_row(a) }}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<section class="card section">
+  <div class="card-header"><h3>Unassigned holdings</h3></div>
+  <div class="card-body">
+    <p class="muted" style="font-size:13px;margin:0 0 .75rem">
+      Holdings with no <code>account_id</code> set. They still roll up to portfolio totals — assign them
+      to an account from the asset / cash / liability page.
+    </p>
+    <div class="grid-3col" style="margin-bottom:0">
+      <div class="kpi"><div class="lbl">Assets</div><div class="val">{{ unassigned_counts.asset }}</div></div>
+      <div class="kpi"><div class="lbl">Cash</div><div class="val">{{ unassigned_counts.cash }}</div></div>
+      <div class="kpi"><div class="lbl">Liabilities</div><div class="val">{{ unassigned_counts.liability }}</div></div>
+    </div>
+    <p class="muted" style="font-size:12px;margin-top:.75rem">
+      Net value of unassigned holdings: <strong>{{ "{:,.0f}".format(unassigned_value) }} {{ base_currency }}</strong>
+    </p>
+  </div>
+</section>
+
+{% endblock %}

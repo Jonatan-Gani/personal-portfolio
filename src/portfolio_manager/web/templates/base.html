@@ -1,9 +1,11 @@
 <!doctype html>
-<html lang="en">
+<html lang="en"
+      data-theme="{{ request.state.ui_theme if request and request.state.ui_theme is defined else 'light' }}"
+      data-density="{{ request.state.ui_density if request and request.state.ui_density is defined else 'comfortable' }}">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="color-scheme" content="light" />
+  <meta name="color-scheme" content="light dark" />
   <title>{% block title %}Portfolio{% endblock %} · Portfolio</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -13,7 +15,7 @@
   <link rel="stylesheet" href="/static/style.css" />
   {% block head_extra %}{% endblock %}
 </head>
-<body>
+<body class="{{ 'privacy' if request and request.state.ui_privacy }}">
   <header class="topbar">
     <a href="/" class="brand">
       <span class="dot"></span>
@@ -24,13 +26,23 @@
       <a href="/"             class="{{ 'active' if p == '/' }}">Dashboard</a>
       <a href="/holdings"     class="{{ 'active' if p.startswith('/holdings') or p.startswith('/assets') or p.startswith('/cash') }}">Holdings</a>
       <a href="/liabilities"  class="{{ 'active' if p.startswith('/liabilities') }}">Debts</a>
+      <a href="/accounts"     class="{{ 'active' if p.startswith('/accounts') }}">Accounts</a>
       <a href="/transactions" class="{{ 'active' if p.startswith('/transactions') or p.startswith('/import') }}">Transactions</a>
       <a href="/returns"      class="{{ 'active' if p.startswith('/returns') }}">Performance</a>
+      <a href="/compare"      class="{{ 'active' if p.startswith('/compare') }}">Compare</a>
       <a href="/income"       class="{{ 'active' if p.startswith('/income') }}">Income</a>
       <a href="/targets"      class="{{ 'active' if p.startswith('/targets') }}">Targets</a>
       <a href="/exposures"    class="{{ 'active' if p.startswith('/exposures') }}">Exposures</a>
     </nav>
     <div class="topbar-meta">
+      <form method="post" action="/settings/toggle-privacy" style="display:inline">
+        <input type="hidden" name="next" value="{{ request.url.path }}">
+        <button class="btn btn-ghost btn-sm" type="submit"
+                title="{{ 'Reveal monetary figures' if request.state.ui_privacy else 'Blur monetary figures (privacy mode)' }}"
+                style="padding:.2rem .45rem;font-size:11px">
+          {{ '👁 hidden' if request.state.ui_privacy else '👁' }}
+        </button>
+      </form>
       <a href="/settings" style="border:none;color:var(--text-mute);font-size:12px">Settings</a>
       <span class="faint">·</span>
       base <span class="ccy">{{ base_currency }}</span>

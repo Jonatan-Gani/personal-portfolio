@@ -7,92 +7,291 @@
     <span class="eyebrow">Configuration</span>
     <h1>Settings</h1>
   </div>
-  <p class="lede">Where your data lives and how to back it up. Everything is in a single DuckDB file —
-  copy that one file and you have everything.</p>
+  <p class="lede">Anything on this page is editable in-app and applies on the next request — no restart needed.
+    Deploy-time concerns (DB path, web host/port, log level) still live in <code>config/config.yaml</code>.</p>
 </div>
 
-<div class="grid-2col">
-  <div class="card">
-    <div class="card-header"><h3>Database</h3></div>
-    <div class="card-body">
-      <table class="mini-ledger">
-        <tbody>
-          <tr><td class="label">Path</td><td class="num mono" style="text-align:left">{{ db.path }}</td></tr>
-          {% if db.exists %}
-          <tr><td class="label">Size</td><td class="num">{{ "{:,.1f}".format(db.size_kb) }} KB</td></tr>
-          <tr><td class="label">Last modified</td><td class="num mono" style="text-align:left">{{ db.modified }}</td></tr>
-          {% else %}
-          <tr><td class="label">Status</td><td class="num text-neg" style="text-align:left">file not found</td></tr>
-          {% endif %}
-        </tbody>
-      </table>
-      {% if db.exists %}
-      <div class="row-actions" style="margin-top:1rem">
-        <a class="btn btn-primary" href="/settings/download-backup">↓ Download .duckdb backup</a>
-        <a class="btn" href="/export/all.zip">↓ Export all (CSV ZIP)</a>
+<div class="settings-layout">
+  <aside class="settings-nav">
+    <a href="#reporting">Reporting &amp; currency</a>
+    <a href="#providers">Data providers</a>
+    <a href="#auto-snapshot">Auto-snapshot</a>
+    <a href="#ui">Appearance</a>
+    <a href="#accounts">Accounts &amp; groups</a>
+    <a href="#data">Data &amp; backup</a>
+    <a href="#tools">Tools</a>
+  </aside>
+
+  <div class="settings-main">
+
+    <section id="reporting" class="card section-first">
+      <div class="card-header">
+        <h3>Reporting &amp; currency</h3>
+        <span class="muted" style="font-size:11px">applied immediately</span>
       </div>
-      <p class="muted" style="font-size:12px;margin-top:1.25rem;line-height:1.6">
-        From the CLI: <code>portfolio backup</code> writes a timestamped copy to
-        <code>data/backups/</code>. <code>portfolio restore PATH</code> swaps a backup back in
-        (the prior live DB is kept as <code>.bak</code>).
-      </p>
-      {% endif %}
-    </div>
-  </div>
+      <div class="card-body">
+        <form method="post" action="/settings/reporting">
+          <div class="field-row">
+            <label class="field">
+              Base currency
+              <input name="base_currency" value="{{ settings.base_currency }}" maxlength="3" required />
+              <span class="hint">Net worth and all base-denominated metrics use this currency.</span>
+            </label>
+            <label class="field span-2">
+              Reporting currencies (comma-separated)
+              <input name="reporting_currencies" value="{{ settings.reporting_currencies | join(', ') }}" />
+              <span class="hint">Each snapshot will materialise position values in all of these.</span>
+            </label>
+            <label class="field">
+              Default display currency
+              <select name="default_currency">
+                {% for cc in settings.reporting_currencies %}
+                  <option value="{{ cc }}" {{ 'selected' if cc == settings.default_currency }}>{{ cc }}</option>
+                {% endfor %}
+              </select>
+              <span class="hint">Initial currency for currency-switchable views.</span>
+            </label>
+          </div>
+          <div class="row-actions" style="margin-top:1rem">
+            <button class="btn btn-primary">Save</button>
+          </div>
+          <p class="muted" style="font-size:11px;margin-top:.75rem">
+            Past snapshots keep the currencies they were taken with. Only future snapshots inherit changes.
+          </p>
+        </form>
+      </div>
+    </section>
 
-  <div class="card">
-    <div class="card-header"><h3>Row counts</h3></div>
-    <div class="card-body dense">
-      <table class="mini-ledger">
-        <tbody>
-          {% for tbl, n in counts.items() %}
-          <tr><td class="label mono">{{ tbl }}</td><td class="num"><strong>{{ "{:,}".format(n) if n is number else n }}</strong></td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
+    <section id="providers" class="card section">
+      <div class="card-header"><h3>Data providers</h3></div>
+      <div class="card-body">
+        <form method="post" action="/settings/providers">
+          <div class="field-row">
+            <label class="field">
+              FX provider
+              <select name="fx_provider">
+                {% for p in fx_providers %}
+                  <option value="{{ p }}" {{ 'selected' if p == settings.fx_provider }}>{{ p }}</option>
+                {% endfor %}
+              </select>
+              <span class="hint">Currently active: <code>{{ settings.fx_provider }}</code></span>
+            </label>
+            <label class="field">
+              Price provider
+              <select name="price_provider">
+                {% for p in price_providers %}
+                  <option value="{{ p }}" {{ 'selected' if p == settings.price_provider }}>{{ p }}</option>
+                {% endfor %}
+              </select>
+              <span class="hint">Currently active: <code>{{ settings.price_provider }}</code></span>
+            </label>
+          </div>
+          <div class="row-actions" style="margin-top:1rem">
+            <button class="btn btn-primary">Save</button>
+          </div>
+        </form>
+      </div>
+    </section>
 
-<div class="card section">
-  <div class="card-header"><h3>Tools</h3></div>
-  <div class="card-body">
-    <div class="tools-grid">
-      <a class="tool" href="/benchmarks">
-        <div class="tool-title">Benchmarks</div>
-        <div class="tool-sub">Indices &amp; funds to compare against (default S&amp;P 500)</div>
-      </a>
-      <a class="tool" href="/exposures">
-        <div class="tool-title">Exposure deep-dive</div>
-        <div class="tool-sub">Breakdowns by sector, instrument, tag, country</div>
-      </a>
-      <a class="tool" href="/snapshots">
-        <div class="tool-title">Snapshot history</div>
-        <div class="tool-sub">Every materialised valuation, auto + manual</div>
-      </a>
-    </div>
-  </div>
-</div>
+    <section id="auto-snapshot" class="card section">
+      <div class="card-header"><h3>Auto-snapshot</h3></div>
+      <div class="card-body">
+        <form method="post" action="/settings/auto-snapshot">
+          <div class="field-row">
+            <label class="field">
+              Enabled
+              <label style="display:flex;gap:.5rem;align-items:center;font-weight:400;font-size:13px">
+                <input type="checkbox" name="enabled" value="1" {{ 'checked' if settings.auto_snapshot_enabled }} />
+                Take a snapshot automatically when stale
+              </label>
+            </label>
+            <label class="field">
+              Stale after (minutes)
+              <input type="number" name="stale_after_minutes" min="1" value="{{ settings.auto_snapshot_stale_minutes }}" />
+              <span class="hint">A snapshot older than this triggers a fresh one on dashboard load.</span>
+            </label>
+          </div>
+          <div class="row-actions" style="margin-top:1rem">
+            <button class="btn btn-primary">Save</button>
+          </div>
+        </form>
+      </div>
+    </section>
 
-<div class="card section">
-  <div class="card-header"><h3>Configuration</h3></div>
-  <div class="card-body">
-    <table class="mini-ledger">
-      <tbody>
-        <tr><td class="label">Base currency</td><td class="num mono" style="text-align:left">{{ config.reporting.base_currency }}</td></tr>
-        <tr><td class="label">Reporting currencies</td><td class="num mono" style="text-align:left">{{ config.reporting.reporting_currencies | join(', ') }}</td></tr>
-        <tr><td class="label">FX provider</td><td class="num mono" style="text-align:left">{{ config.providers.fx.name }}</td></tr>
-        <tr><td class="label">Price provider</td><td class="num mono" style="text-align:left">{{ config.providers.price.name }}</td></tr>
-        <tr><td class="label">Auto-snapshot</td><td class="num mono" style="text-align:left">{{ 'enabled' if config.auto_snapshot.enabled else 'disabled' }} · stale after {{ config.auto_snapshot.stale_after_minutes }}m</td></tr>
-      </tbody>
-    </table>
-    <p class="muted" style="font-size:12px;margin-top:1.25rem">
-      Edit <code>config/config.yaml</code> to change these. Restart the web server after edits.
-    </p>
+    <section id="ui" class="card section">
+      <div class="card-header"><h3>Appearance</h3></div>
+      <div class="card-body">
+        <form method="post" action="/settings/ui">
+          <div class="field-row">
+            <label class="field">
+              Theme
+              <select name="theme">
+                {% for t in themes %}
+                  <option value="{{ t }}" {{ 'selected' if t == settings.theme }}>{{ t }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label class="field">
+              Density
+              <select name="density">
+                {% for d in densities %}
+                  <option value="{{ d }}" {{ 'selected' if d == settings.density }}>{{ d }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label class="field">
+              Locale
+              <input name="locale" value="{{ settings.locale }}" placeholder="en-US" />
+              <span class="hint">Used for date and number formatting.</span>
+            </label>
+            <label class="field">
+              Privacy mode
+              <label style="display:flex;gap:.5rem;align-items:center;font-weight:400;font-size:13px">
+                <input type="checkbox" name="privacy_mode" value="1" {{ 'checked' if settings.privacy_mode }} />
+                Blur monetary figures (useful for screen sharing)
+              </label>
+            </label>
+          </div>
+          <div class="row-actions" style="margin-top:1rem">
+            <button class="btn btn-primary">Save</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section id="accounts" class="card section">
+      <div class="card-header">
+        <h3>Accounts &amp; groups</h3>
+        <a class="btn btn-sm" href="/accounts">Manage →</a>
+      </div>
+      <div class="card-body">
+        <p class="muted" style="font-size:13px;margin:0 0 .75rem">
+          Organise holdings by account (e.g. an IBKR brokerage, a Chase checking account) and group accounts together
+          (e.g. "Household", "Retirement"). Holdings without an account remain "Unassigned" and roll up to portfolio totals.
+        </p>
+        <div class="grid-3col" style="margin-bottom:0">
+          <div class="kpi">
+            <div class="lbl">Groups</div>
+            <div class="val">{{ "{:,}".format(counts.get('account_groups', 0)) if counts.get('account_groups') is number else counts.get('account_groups', 0) }}</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl">Accounts</div>
+            <div class="val">{{ "{:,}".format(counts.get('accounts', 0)) if counts.get('accounts') is number else counts.get('accounts', 0) }}</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl">Holdings linked</div>
+            <div class="val mono">→ /accounts</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="data" class="card section">
+      <div class="card-header"><h3>Data &amp; backup</h3></div>
+      <div class="card-body">
+        <div class="grid-2col" style="margin-bottom:0">
+          <div>
+            <table class="mini-ledger">
+              <tbody>
+                <tr><td class="label">Path</td><td class="num mono" style="text-align:left">{{ db.path }}</td></tr>
+                {% if db.exists %}
+                <tr><td class="label">Size</td><td class="num">{{ "{:,.1f}".format(db.size_kb) }} KB</td></tr>
+                <tr><td class="label">Last modified</td><td class="num mono" style="text-align:left">{{ db.modified }}</td></tr>
+                {% else %}
+                <tr><td class="label">Status</td><td class="num text-neg" style="text-align:left">file not found</td></tr>
+                {% endif %}
+              </tbody>
+            </table>
+            {% if db.exists %}
+            <div class="row-actions" style="margin-top:1rem">
+              <a class="btn btn-primary" href="/settings/download-backup">↓ Download .duckdb backup</a>
+              <a class="btn" href="/export/all.zip">↓ Export all (CSV ZIP)</a>
+            </div>
+            <p class="muted" style="font-size:11px;margin-top:1rem;line-height:1.6">
+              From the CLI: <code>portfolio backup</code> writes a timestamped copy to
+              <code>data/backups/</code>. <code>portfolio restore PATH</code> swaps a backup back in
+              (the prior live DB is kept as <code>.bak</code>).
+            </p>
+            {% endif %}
+          </div>
+          <div>
+            <h4 style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-mute);margin:0 0 .5rem">Row counts</h4>
+            <table class="mini-ledger">
+              <tbody>
+                {% for tbl, n in counts.items() %}
+                <tr><td class="label mono">{{ tbl }}</td><td class="num"><strong>{{ "{:,}".format(n) if n is number else n }}</strong></td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tools" class="card section">
+      <div class="card-header"><h3>Tools</h3></div>
+      <div class="card-body">
+        <div class="tools-grid">
+          <a class="tool" href="/benchmarks">
+            <div class="tool-title">Benchmarks</div>
+            <div class="tool-sub">Indices &amp; funds to compare against</div>
+          </a>
+          <a class="tool" href="/exposures">
+            <div class="tool-title">Exposure deep-dive</div>
+            <div class="tool-sub">Breakdowns by sector, instrument, tag, country</div>
+          </a>
+          <a class="tool" href="/snapshots">
+            <div class="tool-title">Snapshot history</div>
+            <div class="tool-sub">Every materialised valuation, auto + manual</div>
+          </a>
+          <a class="tool" href="/accounts">
+            <div class="tool-title">Accounts</div>
+            <div class="tool-sub">Define brokers and account groups</div>
+          </a>
+          <a class="tool" href="/compare">
+            <div class="tool-title">Compare</div>
+            <div class="tool-sub">Side-by-side accounts or groups</div>
+          </a>
+          <a class="tool" href="/import">
+            <div class="tool-title">CSV import</div>
+            <div class="tool-sub">Bulk-load transactions</div>
+          </a>
+        </div>
+      </div>
+    </section>
+
   </div>
 </div>
 
 <style>
+  .settings-layout {
+    display: grid;
+    grid-template-columns: 200px minmax(0, 1fr);
+    gap: 1.5rem;
+    align-items: start;
+  }
+  .settings-nav {
+    position: sticky;
+    top: 76px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .settings-nav a {
+    border: none;
+    color: var(--text-mute);
+    font-size: 12.5px;
+    font-weight: 500;
+    padding: .4rem .6rem;
+    border-left: 2px solid transparent;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+  .settings-nav a:hover {
+    color: var(--text);
+    background: var(--surface-alt);
+    border-left-color: var(--border-strong);
+  }
+  .section-first { margin-top: 0; }
   .tools-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -114,5 +313,19 @@
   }
   .tool-title { font-weight: 600; font-size: 13px; margin-bottom: .2rem; }
   .tool-sub { font-size: 12px; color: var(--text-mute); }
+
+  @media (max-width: 980px) {
+    .settings-layout { grid-template-columns: 1fr; }
+    .settings-nav {
+      position: relative;
+      top: 0;
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: .25rem;
+      padding-bottom: .5rem;
+      border-bottom: 1px solid var(--border-soft);
+      margin-bottom: 1rem;
+    }
+  }
 </style>
 {% endblock %}

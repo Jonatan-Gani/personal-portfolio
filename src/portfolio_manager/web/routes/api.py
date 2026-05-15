@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from ...domain.exceptions import FXRateUnavailable, NotFoundError
+from ...services.scope import parse_scope, scope_filter_sql, scope_join_sql
 
 router = APIRouter(prefix="/api")
 
@@ -66,14 +67,22 @@ def _rebase(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 @router.get("/timeseries/networth")
-def networth_timeseries(request: Request, currency: str | None = None):
+def networth_timeseries(request: Request, currency: str | None = None, scope: str = "all"):
     """Return [{taken_at, snapshot_id, net_worth, assets, cash, liabilities}] in `currency`,
-    valued at the FX rates each snapshot recorded. Currency defaults to base."""
+    valued at the FX rates each snapshot recorded. Currency defaults to base.
+
+    `scope` filters by account/group ('all' | 'unassigned' | 'group:<id>' | 'account:<id>').
+    Scope filtering uses each holding's CURRENT account assignment, applied to every
+    historical snapshot — this is intentional, so you can look at "this account's
+    history" even if you only assigned the account later."""
     c = request.app.state.container
     ccy = (currency or c.config.reporting.base_currency).upper()
     db = c.db
+    _, account_ids, _ = parse_scope(scope, c)
+    scope_where, scope_params = scope_filter_sql(account_ids)
+    joins = scope_join_sql() if account_ids is not None else ""
     rows = db.fetchall_dict(
-        """
+        f"""
         SELECT s.snapshot_id, s.taken_at, s.notes, s.base_currency,
                COALESCE(SUM(CASE WHEN p.position_kind = 'asset'     THEN v.value ELSE 0 END), 0) AS assets,
                COALESCE(SUM(CASE WHEN p.position_kind = 'cash'      THEN v.value ELSE 0 END), 0) AS cash,
@@ -86,10 +95,13 @@ def networth_timeseries(request: Request, currency: str | None = None):
            AND v.position_kind = p.position_kind
            AND v.entity_id = p.entity_id
            AND v.currency = ?
+          {joins}
+         WHERE 1=1
+           {scope_where}
          GROUP BY s.snapshot_id, s.taken_at, s.notes, s.base_currency
          ORDER BY s.taken_at ASC
         """,
-        [ccy],
+        [ccy, *scope_params],
     )
     series = [
         {
@@ -133,12 +145,15 @@ def latest_allocation(
     currency: str | None = None,
     kind: str | None = None,
     kinds: str | None = None,
+    scope: str = "all",
 ):
     """Allocation breakdown for the most recent snapshot.
 
     `kind` is a single kind ("asset"|"cash"|"liability"). `kinds` is a comma-separated
     list — e.g. "asset,cash". If neither is provided, only non-liability positions
     are included so the chart isn't dominated by debt.
+
+    `scope` filters by account/group (see /api/timeseries/networth).
     """
     c = request.app.state.container
     latest = c.snapshots_repo.latest()
@@ -155,14 +170,16 @@ def latest_allocation(
     else:
         selected = ["asset", "cash"]  # default: don't include liabilities
 
+    _, account_ids, _ = parse_scope(scope, c)
+
     if dim == "tag":
-        raw = c.exposure.by_tag(ccy, latest.snapshot_id)
+        raw = c.exposure.by_tag(ccy, latest.snapshot_id, account_ids=account_ids)
         rows = [
             {"label": r["tag"], "value": float(r["value"]), "share": float(r["share"]), "positions": int(r["positions"])}
             for r in raw
         ]
     else:
-        raw = c.exposure.by_dimension(dim, ccy, latest.snapshot_id, selected)
+        raw = c.exposure.by_dimension(dim, ccy, latest.snapshot_id, selected, account_ids=account_ids)
         rows = [
             {"label": r["bucket"], "value": float(r["value"]), "share": float(r["share"]), "positions": int(r["positions"])}
             for r in raw
