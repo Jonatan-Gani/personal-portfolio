@@ -61,6 +61,7 @@
         <label class="field span-2" id="tx-entity-field">
           Position
           <select name="entity" id="tx-entity" required>
+            <option value="new">+ Create new position…</option>
             <optgroup label="Assets">
               {% for a in assets %}
                 <option value="asset:{{ a.asset_id }}"
@@ -95,6 +96,31 @@
             </optgroup>
           </select>
           <span class="hint" id="tx-entity-hint"></span>
+        </label>
+
+        <label class="field" id="tx-new-kind-field" hidden>New position type
+          <select name="new_kind" id="tx-new-kind">
+            <option value="asset">Asset (stock, ETF, fund, etc.)</option>
+            <option value="cash">Cash account</option>
+            <option value="liability">Liability (loan, mortgage, etc.)</option>
+          </select>
+          <span class="hint">Defaults can be refined later on the position's own page.</span>
+        </label>
+
+        <label class="field" id="tx-new-name-field" hidden>Name
+          <input name="new_name" id="tx-new-name" placeholder="e.g. Apple Inc. / Chase Checking">
+        </label>
+
+        <label class="field" id="tx-new-symbol-field" hidden>Symbol
+          <input name="new_symbol" id="tx-new-symbol" placeholder="e.g. AAPL (optional)">
+          <span class="hint">Used to fetch live prices later.</span>
+        </label>
+
+        <label class="field" id="tx-new-account-field" hidden>Account
+          <select name="new_account_id" id="tx-new-account">
+            <option value="">— unassigned —</option>
+            {% for a in accounts %}<option value="{{ a.account_id }}">{{ a.name }}{% if a.broker %} · {{ a.broker }}{% endif %}</option>{% endfor %}
+          </select>
         </label>
 
         <label class="field" data-show="buy,sell,split,opening_balance">Quantity
@@ -151,6 +177,13 @@
   const CURRENCY = document.getElementById("tx-currency");
   const DATE = document.getElementById("tx-date");
   const SUMMARY = document.getElementById("tx-summary");
+  const NEW_KIND_FIELD = document.getElementById("tx-new-kind-field");
+  const NEW_NAME_FIELD = document.getElementById("tx-new-name-field");
+  const NEW_SYMBOL_FIELD = document.getElementById("tx-new-symbol-field");
+  const NEW_ACCOUNT_FIELD = document.getElementById("tx-new-account-field");
+  const NEW_KIND = document.getElementById("tx-new-kind");
+  const NEW_NAME = document.getElementById("tx-new-name");
+  const NEW_ACCOUNT = document.getElementById("tx-new-account");
 
   // Default to today
   if (DATE && !DATE.value) DATE.value = new Date().toISOString().slice(0, 10);
@@ -204,7 +237,7 @@
     let firstVisible = null;
     let visibleCount = 0;
     Array.from(ENTITY.options).forEach(opt => {
-      if (!opt.dataset.kind) return; // optgroup label rows aren't real options
+      if (!opt.dataset.kind) return; // optgroup labels and the "new" sentinel
       const kindOk = validKinds.includes(opt.dataset.kind);
       const acctOk = !wantedAccount || opt.dataset.account === wantedAccount;
       const ok = kindOk && acctOk;
@@ -222,22 +255,60 @@
       g.hidden = !anyVisible;
     });
 
-    if (visibleCount === 0) {
-      ENTITY_HINT.innerHTML = '<span style="color:var(--neg)">No positions match. Add one on Accounts, Holdings, or Liabilities first.</span>';
-    } else if (visibleCount === 1) {
-      ENTITY_HINT.textContent = `One position available.`;
-    } else {
-      ENTITY_HINT.textContent = `${visibleCount} positions available.`;
+    // Restrict the new-kind dropdown to kinds valid for this transaction type.
+    let firstValidNewKind = null;
+    Array.from(NEW_KIND.options).forEach(opt => {
+      const ok = validKinds.includes(opt.value);
+      opt.hidden = !ok;
+      opt.disabled = !ok;
+      if (ok && !firstValidNewKind) firstValidNewKind = opt.value;
+    });
+    if (NEW_KIND.selectedOptions[0] && NEW_KIND.selectedOptions[0].disabled && firstValidNewKind) {
+      NEW_KIND.value = firstValidNewKind;
     }
-    if (ENTITY.selectedOptions[0] && ENTITY.selectedOptions[0].hidden && firstVisible) {
-      ENTITY.value = firstVisible.value;
+
+    // If the current selection is a now-hidden existing entity, switch to the first
+    // visible existing one — or to "new" when none are available for this type.
+    if (ENTITY.value !== "new" && ENTITY.selectedOptions[0] && ENTITY.selectedOptions[0].hidden) {
+      ENTITY.value = firstVisible ? firstVisible.value : "new";
     }
+
+    if (ENTITY.value !== "new") {
+      if (visibleCount === 1) {
+        ENTITY_HINT.textContent = `One position available.`;
+      } else {
+        ENTITY_HINT.textContent = `${visibleCount} positions available.`;
+      }
+    }
+    applyNewEntityMode();
     inheritFromEntity();
+  }
+
+  function applyNewEntityMode() {
+    const creating = ENTITY.value === "new";
+    NEW_KIND_FIELD.hidden = !creating;
+    NEW_NAME_FIELD.hidden = !creating;
+    NEW_ACCOUNT_FIELD.hidden = !creating;
+    NEW_SYMBOL_FIELD.hidden = !creating || NEW_KIND.value !== "asset";
+    NEW_NAME.required = creating;
+    if (creating) {
+      // No entity is selected, so we can't inherit currency — make the user pick it.
+      CURRENCY.required = true;
+      CURRENCY.placeholder = "USD, EUR, …";
+      ENTITY_HINT.textContent = "Filling in a new position. You can refine the details later on its page.";
+      // Default the new account selector to the account filter if one is chosen.
+      if (NEW_ACCOUNT && !NEW_ACCOUNT.dataset.userTouched && ACCOUNT_FILTER.value && ACCOUNT_FILTER.value !== "__unassigned__") {
+        NEW_ACCOUNT.value = ACCOUNT_FILTER.value;
+      }
+    } else {
+      CURRENCY.required = false;
+      CURRENCY.placeholder = "";
+    }
   }
 
   function inheritFromEntity() {
     const opt = ENTITY.selectedOptions[0];
-    if (!opt) return;
+    if (!opt || ENTITY.value === "new") return;
     if (CURRENCY && !CURRENCY.dataset.userTouched) {
       CURRENCY.value = opt.dataset.currency || "";
     }
@@ -274,12 +345,17 @@
 
   TYPE.addEventListener("change", () => { applyTypeVisibility(); refilterEntityOptions(); recompute(); });
   ACCOUNT_FILTER.addEventListener("change", refilterEntityOptions);
-  ENTITY.addEventListener("change", () => { inheritFromEntity(); recompute(); });
+  ENTITY.addEventListener("change", () => { applyNewEntityMode(); inheritFromEntity(); recompute(); });
+  NEW_KIND.addEventListener("change", applyNewEntityMode);
+  NEW_ACCOUNT.addEventListener("change", () => { NEW_ACCOUNT.dataset.userTouched = "1"; });
   [QTY, PRICE, FEES].forEach(el => el && el.addEventListener("input", recompute));
   AMOUNT.addEventListener("input", () => { AMOUNT.dataset.userTouched = "1"; });
   CURRENCY.addEventListener("input", () => { CURRENCY.dataset.userTouched = "1"; });
 
   applyTypeVisibility();
+  // Prefer a real existing entity on first load; fall back to "new" if there is none.
+  const firstReal = Array.from(ENTITY.options).find(o => o.dataset.kind && !o.disabled && !o.hidden);
+  if (firstReal) ENTITY.value = firstReal.value;
   refilterEntityOptions();
 })();
 </script>
