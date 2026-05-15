@@ -31,17 +31,17 @@
       <label class="field">Name <input name="name" required></label>
       <label class="field">Type
         <select name="liability_type">
-          {% for t in liability_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+          {% for t in liability_types %}<option value="{{ t }}">{{ t | humanize }}</option>{% endfor %}
         </select>
       </label>
       <label class="field">Currency <input name="currency" required maxlength="3" list="ccy-list"></label>
       <label class="field">Opening balance
         <input name="opening_balance" type="number" step="any" required>
-        <span class="hint">creates an OPENING_BALANCE transaction</span>
+        <span class="hint">Creates an "Opening balance" transaction.</span>
       </label>
-      <label class="field">Interest rate (decimal)
-        <input name="interest_rate" type="number" step="any" placeholder="e.g. 0.045 for 4.5%">
-        <span class="hint">APR — accrues daily on each snapshot</span>
+      <label class="field">Interest rate (APR %)
+        <input name="interest_rate_pct" type="number" step="any" placeholder="e.g. 4.5">
+        <span class="hint">Annual percentage rate — accrues daily on each snapshot.</span>
       </label>
       <label class="field">Tags <input name="tags" placeholder="comma, separated"></label>
       <label class="field span-2">Notes <input name="notes"></label>
@@ -68,13 +68,13 @@
       {% for l in items %}
       <tr class="{{ 'inactive' if not l.is_active }}">
         <td><strong>{{ l.name }}</strong></td>
-        <td>{{ l.liability_type.value }}</td>
+        <td>{{ l.liability_type.value | humanize }}</td>
         <td class="mono">{{ l.currency }}</td>
         <td class="num">
           <strong>{{ "{:,.2f}".format(principals.get(l.liability_id, 0)) }}</strong>
           <div class="meta"><a href="/transactions?entity_id={{ l.liability_id }}&kind=liability">history</a></div>
         </td>
-        <td class="num">{% if l.interest_rate is not none %}{{ "{:.3%}".format(l.interest_rate) }}{% else %}—{% endif %}</td>
+        <td class="num">{% if l.interest_rate is not none %}{{ "%.2f%%" % (l.interest_rate * 100) }}{% else %}—{% endif %}</td>
         <td>
           {% if l.tags %}
             <div class="tag-list">{% for t in l.tags %}<span class="tag">{{ t }}</span>{% endfor %}</div>
@@ -90,11 +90,14 @@
                   <label class="field">Name <input name="name" value="{{ l.name }}" required></label>
                   <label class="field">Type
                     <select name="liability_type">
-                      {% for t in liability_types %}<option value="{{ t }}" {% if t == l.liability_type.value %}selected{% endif %}>{{ t }}</option>{% endfor %}
+                      {% for t in liability_types %}<option value="{{ t }}" {% if t == l.liability_type.value %}selected{% endif %}>{{ t | humanize }}</option>{% endfor %}
                     </select>
                   </label>
                   <label class="field">Ccy <input name="currency" value="{{ l.currency }}" list="ccy-list" required></label>
-                  <label class="field">Rate <input name="interest_rate" type="number" step="any" value="{{ l.interest_rate or '' }}"></label>
+                  <label class="field">Rate (APR %)
+                    <input name="interest_rate_pct" type="number" step="any"
+                           value="{{ '%.4f' % (l.interest_rate * 100) if l.interest_rate is not none else '' }}">
+                  </label>
                   <label class="field">Tags <input name="tags" value="{{ l.tags|join(', ') }}"></label>
                   <label class="field span-2">Notes <input name="notes" value="{{ l.notes or '' }}"></label>
                   <div class="span-4 row-actions">

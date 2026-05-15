@@ -67,14 +67,14 @@
     <tbody>
       {% for p in positions %}
       <tr>
-        <td><span class="pill kind-{{ p.position_kind }}">{{ p.position_kind }}</span></td>
+        <td><span class="pill kind-{{ p.position_kind }}">{{ p.position_kind | humanize }}</span></td>
         <td>
           <strong>{{ p.name or '—' }}</strong>
           <div class="meta mono">{{ p.currency }}</div>
         </td>
         <td class="muted">
-          {{ p.instrument_type or '—' }}
-          {% if p.asset_class %}<div class="meta">{{ p.asset_class }}</div>{% endif %}
+          {{ (p.instrument_type | humanize) if p.instrument_type else '—' }}
+          {% if p.asset_class %}<div class="meta">{{ p.asset_class | humanize }}</div>{% endif %}
         </td>
         <td class="mono faint">{{ p.country or '—' }}</td>
         <td class="num">{{ "{:,.4f}".format(p.quantity) if p.quantity is not none else '—' }}</td>

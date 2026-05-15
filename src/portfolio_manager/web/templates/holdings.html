@@ -49,12 +49,12 @@
         <label class="field">Symbol <input name="symbol" list="symbol-list" placeholder="e.g. VOO"></label>
         <label class="field">Instrument
           <select name="instrument_type">
-            {% for t in instrument_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+            {% for t in instrument_types %}<option value="{{ t }}">{{ t | humanize }}</option>{% endfor %}
           </select>
         </label>
         <label class="field">Asset class
           <select name="asset_class">
-            {% for t in asset_classes %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+            {% for t in asset_classes %}<option value="{{ t }}">{{ t | humanize }}</option>{% endfor %}
           </select>
         </label>
         <label class="field">Currency <input name="currency" required maxlength="3" list="ccy-list" placeholder="USD"></label>
@@ -102,10 +102,10 @@
         <tr class="{{ 'inactive' if not a.is_active }}">
           <td>
             <strong>{{ a.name }}</strong>
-            <div class="meta faint">{{ a.instrument_type.value }}{% if a.country %} · {{ a.country }}{% endif %}</div>
+            <div class="meta faint">{{ a.instrument_type.value | humanize }}{% if a.country %} · {{ a.country }}{% endif %}</div>
           </td>
           <td class="mono">{{ a.symbol or '—' }}</td>
-          <td><span class="pill faint">{{ a.asset_class.value }}</span></td>
+          <td><span class="pill faint">{{ a.asset_class.value | humanize }}</span></td>
           <td class="mono">{{ a.currency }}</td>
           <td class="num">
             <strong>{{ "{:,.4f}".format(qty) }}</strong>
@@ -145,12 +145,12 @@
                     <label class="field">Symbol <input name="symbol" value="{{ a.symbol or '' }}" list="symbol-list"></label>
                     <label class="field">Instrument
                       <select name="instrument_type">
-                        {% for t in instrument_types %}<option value="{{ t }}" {% if t == a.instrument_type.value %}selected{% endif %}>{{ t }}</option>{% endfor %}
+                        {% for t in instrument_types %}<option value="{{ t }}" {% if t == a.instrument_type.value %}selected{% endif %}>{{ t | humanize }}</option>{% endfor %}
                       </select>
                     </label>
                     <label class="field">Class
                       <select name="asset_class">
-                        {% for t in asset_classes %}<option value="{{ t }}" {% if t == a.asset_class.value %}selected{% endif %}>{{ t }}</option>{% endfor %}
+                        {% for t in asset_classes %}<option value="{{ t }}" {% if t == a.asset_class.value %}selected{% endif %}>{{ t | humanize }}</option>{% endfor %}
                       </select>
                     </label>
                     <label class="field">Ccy <input name="currency" value="{{ a.currency }}" list="ccy-list" required></label>

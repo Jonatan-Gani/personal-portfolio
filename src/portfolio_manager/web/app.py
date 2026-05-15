@@ -20,6 +20,37 @@ _TEMPLATES_DIR = Path(__file__).parent / "templates"
 _STATIC_DIR = Path(__file__).parent / "static"
 
 
+_ACCOUNT_TYPE_LABELS = {
+    "taxable": "Taxable",
+    "ira": "Traditional IRA",
+    "roth": "Roth IRA",
+    "k401": "401(k)",
+    "hsa": "HSA",
+    "checking": "Checking",
+    "savings": "Savings",
+    "brokerage": "Brokerage",
+    "mortgage": "Mortgage",
+    "loan": "Loan",
+    "credit_card": "Credit card",
+    "other": "Other",
+}
+
+
+def _humanize(v) -> str:
+    """`OPENING_BALANCE` / `opening_balance` -> 'Opening balance'."""
+    if v is None:
+        return ""
+    s = getattr(v, "value", v)
+    s = str(s).replace("_", " ").strip()
+    return s[:1].upper() + s[1:].lower() if s else ""
+
+
+def _humanize_account_type(v) -> str:
+    if v is None:
+        return ""
+    return _ACCOUNT_TYPE_LABELS.get(str(v), _humanize(v))
+
+
 def create_app(config: AppConfig | None = None) -> FastAPI:
     cfg = config or load_config()
     configure_logging(cfg.logging.level, cfg.logging.json_format)
@@ -33,6 +64,26 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
     templates.env.globals["base_currency"] = cfg.reporting.base_currency
     templates.env.globals["reporting_currencies"] = cfg.reporting.reporting_currencies
+    templates.env.filters["humanize"] = _humanize
+    templates.env.filters["humanize_account_type"] = _humanize_account_type
+
+    # Per-request: settings-aware globals (theme, density, privacy) and the
+    # effective base currency. Falls back to config.yaml if app_settings is empty.
+    @app.middleware("http")
+    async def _settings_globals(request, call_next):
+        try:
+            s = container.app_settings_repo.all()
+        except Exception:  # noqa: BLE001 — DB might not be ready yet on first boot
+            s = {}
+        request.state.ui_theme = s.get("ui.theme", "light")
+        request.state.ui_density = s.get("ui.density", "comfortable")
+        request.state.ui_privacy = bool(s.get("ui.privacy_mode", False))
+        request.state.base_currency = s.get("reporting.base_currency", cfg.reporting.base_currency)
+        request.state.reporting_currencies = s.get(
+            "reporting.reporting_currencies", cfg.reporting.reporting_currencies
+        )
+        return await call_next(request)
+
     app.state.templates = templates
 
     if _STATIC_DIR.exists():

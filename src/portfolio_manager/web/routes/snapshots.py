@@ -10,10 +10,17 @@ router = APIRouter()
 def list_snapshots(request: Request):
     c = request.app.state.container
     snaps = c.snapshots_repo.list_snapshots(limit=200)
+    # Each row's "compare to previous" link points at the snapshot taken just
+    # before it (chronologically). The list is descending, so the next row
+    # is the prior snapshot.
+    rows = []
+    for idx, s in enumerate(snaps):
+        prev_id = snaps[idx + 1].snapshot_id if idx + 1 < len(snaps) else None
+        rows.append({"meta": s, "prev_id": prev_id})
     return request.app.state.templates.TemplateResponse(
         request,
         "snapshots.html",
-        {"request": request, "snapshots": snaps},
+        {"request": request, "rows": rows},
     )
 
 

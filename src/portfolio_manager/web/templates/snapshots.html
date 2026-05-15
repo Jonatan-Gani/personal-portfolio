@@ -38,19 +38,27 @@
       </tr>
     </thead>
     <tbody>
-      {% for s in snapshots %}
+      {% for r in rows %}
+      {% set s = r.meta %}
       <tr>
         <td>
           <span class="mono">{{ s.taken_at.strftime("%Y-%m-%d") if s.taken_at.strftime else s.taken_at }}</span>
           <div class="meta mono">{{ s.taken_at.strftime("%H:%M UTC") if s.taken_at.strftime else '' }}</div>
         </td>
-        <td class="mono faint">{{ s.snapshot_id[:8] }}</td>
+        <td class="mono faint" title="{{ s.snapshot_id }}">{{ s.snapshot_id[:8] }}</td>
         <td class="num"><strong>{{ "{:,.0f}".format(s.net_worth_base) }}</strong> <span class="faint">{{ s.base_currency }}</span></td>
         <td class="num">{{ "{:,.0f}".format(s.total_assets_base) }}</td>
         <td class="num">{{ "{:,.0f}".format(s.total_cash_base) }}</td>
         <td class="num">{{ "{:,.0f}".format(s.total_liabilities_base) }}</td>
         <td class="muted">{{ s.notes or '—' }}</td>
-        <td class="right"><a href="/snapshots/{{ s.snapshot_id }}">view →</a></td>
+        <td class="right">
+          <div class="row-actions" style="justify-content:flex-end">
+            {% if r.prev_id %}
+              <a class="btn btn-sm" href="/snapshots/{{ r.prev_id }}/diff/{{ s.snapshot_id }}" title="Decompose change from the prior snapshot (price · FX · flows)">vs prev</a>
+            {% endif %}
+            <a class="btn btn-sm btn-primary" href="/snapshots/{{ s.snapshot_id }}">view →</a>
+          </div>
+        </td>
       </tr>
       {% else %}
       <tr><td colspan="8" class="table-empty">No snapshots yet — open the dashboard to trigger an auto-snapshot.</td></tr>

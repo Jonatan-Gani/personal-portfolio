@@ -22,7 +22,7 @@
       <label class="field">Date <input name="transaction_date" type="date" required value="{{ filters.since or '' }}"></label>
       <label class="field">Type
         <select name="transaction_type" required>
-          {% for t in transaction_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+          {% for t in transaction_types %}<option value="{{ t }}">{{ t | humanize }}</option>{% endfor %}
         </select>
       </label>
       <label class="field">Entity kind
@@ -62,9 +62,9 @@
       <button class="btn btn-primary span-4" style="justify-self:start">Save transaction</button>
     </form>
     <p class="muted" style="font-size:12px;margin-top:.85rem">
-      Quick guide: <strong>opening_balance</strong> sets initial state · <strong>buy/sell</strong> changes asset quantity ·
-      <strong>deposit/withdraw/dividend/fee/interest</strong> changes a cash balance ·
-      <strong>repayment/principal_change</strong> changes liability principal · <strong>split</strong> multiplies asset quantity by the ratio in <em>quantity</em>.
+      Quick guide: <strong>Opening balance</strong> sets initial state · <strong>Buy / Sell</strong> changes asset quantity ·
+      <strong>Deposit / Withdraw / Dividend / Fee / Interest</strong> changes a cash balance ·
+      <strong>Repayment / Principal change</strong> changes liability principal · <strong>Split</strong> multiplies asset quantity by the ratio in <em>quantity</em>.
     </p>
   </div>
 </details>
@@ -73,15 +73,15 @@
   <label class="field">Kind
     <select name="kind">
       <option value="">all</option>
-      <option value="asset"     {% if filters.kind == 'asset' %}selected{% endif %}>assets</option>
-      <option value="cash"      {% if filters.kind == 'cash' %}selected{% endif %}>cash</option>
-      <option value="liability" {% if filters.kind == 'liability' %}selected{% endif %}>liabilities</option>
+      <option value="asset"     {% if filters.kind == 'asset' %}selected{% endif %}>Assets</option>
+      <option value="cash"      {% if filters.kind == 'cash' %}selected{% endif %}>Cash</option>
+      <option value="liability" {% if filters.kind == 'liability' %}selected{% endif %}>Liabilities</option>
     </select>
   </label>
   <label class="field">Type
     <select name="type">
       <option value="">all</option>
-      {% for t in transaction_types %}<option value="{{ t }}" {% if filters.type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+      {% for t in transaction_types %}<option value="{{ t }}" {% if filters.type == t %}selected{% endif %}>{{ t | humanize }}</option>{% endfor %}
     </select>
   </label>
   <label class="field">Since
@@ -121,10 +121,10 @@
         else liab_names.get(tx.entity_id, tx.entity_id) %}
       <tr>
         <td class="mono">{{ tx.transaction_date }}</td>
-        <td><span class="pill kind-{{ tx.entity_kind.value }}">{{ tx.transaction_type.value }}</span></td>
+        <td><span class="pill kind-{{ tx.entity_kind.value }}">{{ tx.transaction_type.value | humanize }}</span></td>
         <td>
           <strong>{{ name or tx.entity_id[:8] }}</strong>
-          <div class="meta">{{ tx.entity_kind.value }}</div>
+          <div class="meta">{{ tx.entity_kind.value | humanize }}</div>
         </td>
         <td class="num">{{ "{:,.4f}".format(tx.quantity) if tx.quantity is not none else '—' }}</td>
         <td class="num">{{ "{:,.4f}".format(tx.price) if tx.price is not none else '—' }}</td>
