@@ -42,6 +42,28 @@ If `.bat` activation *is* allowed, the short form works too — run
 `.venv\Scripts\activate.bat` once, then just `portfolio init-db` /
 `portfolio web` for the rest of the session.
 
+#### Windows with AppLocker / "blocked by group policy"
+
+Some corporate machines block executing any `.exe` from user-writable
+folders (Downloads, Desktop, the venv's `Scripts\` directory). In that
+case skip the venv entirely and use the system `py.exe` launcher
+(`C:\Windows\py.exe` is trusted). Install into your user site-packages
+and run the CLI as a module:
+
+```bat
+py -3 -m pip install --user -e ".[dev]"
+
+copy config\config.example.yaml config\config.yaml
+copy .env.example .env
+
+py -3 -m portfolio_manager.cli init-db
+py -3 -m portfolio_manager.cli web
+```
+
+If `py -3` is also unavailable, ask IT to add `py.exe` or your project
+folder to the AppLocker allow-list — there is no further user-mode
+workaround.
+
 ### Windows (PowerShell)
 
 ```powershell
