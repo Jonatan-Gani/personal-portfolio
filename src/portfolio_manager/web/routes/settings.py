@@ -78,6 +78,17 @@ def settings_page(request: Request):
         except Exception:  # noqa: BLE001
             counts[tbl] = "?"
 
+    # Market watchlist (one entry per line, "SYMBOL | Label")
+    raw_watchlist = c.app_settings_repo.get("ui.market_watchlist")
+    if isinstance(raw_watchlist, list) and raw_watchlist:
+        watchlist_text = "\n".join(
+            f"{(it.get('symbol') or '').strip()} | {(it.get('label') or '').strip()}"
+            for it in raw_watchlist if it.get("symbol")
+        )
+    else:
+        from ...services.markets import DEFAULT_WATCHLIST
+        watchlist_text = "\n".join(f"{it['symbol']} | {it['label']}" for it in DEFAULT_WATCHLIST)
+
     return request.app.state.templates.TemplateResponse(
         request,
         "settings.html",
@@ -92,6 +103,7 @@ def settings_page(request: Request):
             "densities": ["comfortable", "compact"],
             "fx_providers": ["ecb", "mock"],
             "price_providers": ["yfinance", "mock"],
+            "watchlist_text": watchlist_text,
         },
     )
 
@@ -170,6 +182,25 @@ def toggle_privacy(request: Request, next: str = Form("/")):
     current = bool(c.app_settings_repo.get("ui.privacy_mode", False))
     c.app_settings_repo.set("ui.privacy_mode", not current)
     return RedirectResponse(next or "/", status_code=303)
+
+
+@router.post("/settings/market-watchlist")
+def update_market_watchlist(request: Request, watchlist: str = Form("")):
+    """Watchlist text is one entry per line, in `SYMBOL | Label` format.
+    Lines without a `|` use the symbol as the label."""
+    c = request.app.state.container
+    items: list[dict[str, str]] = []
+    for raw in (watchlist or "").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if "|" in line:
+            sym, _, label = line.partition("|")
+            items.append({"symbol": sym.strip(), "label": label.strip() or sym.strip()})
+        else:
+            items.append({"symbol": line, "label": line})
+    c.app_settings_repo.set("ui.market_watchlist", items)
+    return RedirectResponse("/settings#markets", status_code=303)
 
 
 @router.get("/settings/download-backup")

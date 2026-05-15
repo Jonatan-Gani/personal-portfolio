@@ -22,6 +22,7 @@ from ..repositories import (
 )
 from ..services import (
     AccrualService,
+    AssetLookupService,
     BenchmarkService,
     CostBasisService,
     DriftService,
@@ -29,6 +30,7 @@ from ..services import (
     FXService,
     HoldingsService,
     IncomeService,
+    MarketsService,
     PerformanceService,
     PortfolioService,
     ReturnsService,
@@ -56,6 +58,8 @@ class Container:
     income: IncomeService
     accrual: AccrualService
     risk: RiskService
+    markets: MarketsService
+    asset_lookup: AssetLookupService
     snapshots_repo: SnapshotRepository
     transactions_repo: TransactionRepository
     benchmarks_repo: BenchmarkRepository
@@ -116,6 +120,8 @@ def build_container(config: AppConfig, db: Database) -> Container:
     drift_service = DriftService(db, targets_repo, exposure_service)
     income_service = IncomeService(db, fx_service, cost_basis_service, config.reporting.base_currency)
     risk_service = RiskService(db, performance_service)
+    markets_service = MarketsService(provider=price_provider, cache=price_cache, cache_ttl_minutes=60)
+    asset_lookup_service = AssetLookupService()
 
     return Container(
         config=config,
@@ -134,6 +140,8 @@ def build_container(config: AppConfig, db: Database) -> Container:
         income=income_service,
         accrual=accrual,
         risk=risk_service,
+        markets=markets_service,
+        asset_lookup=asset_lookup_service,
         snapshots_repo=snap_repo,
         transactions_repo=tx_repo,
         benchmarks_repo=bench_repo,

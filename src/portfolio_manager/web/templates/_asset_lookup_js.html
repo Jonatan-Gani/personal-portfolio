@@ -1,0 +1,85 @@
+{# Wires up every .lookup-row on the page to /api/asset-lookup. Included from
+   templates that have an asset add/edit form. #}
+<style>
+  .lookup-row {
+    grid-column: span 4;
+    display: flex;
+    gap: .5rem;
+    align-items: end;
+    flex-wrap: wrap;
+    padding: .5rem .75rem;
+    background: var(--surface-alt);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
+    margin-bottom: .25rem;
+  }
+  .lookup-row .field { flex: 1; min-width: 11rem; }
+  .lookup-status { flex: 1 1 100%; min-height: 1em; }
+  .lookup-status.ok  { color: var(--pos); }
+  .lookup-status.err { color: var(--neg); }
+</style>
+<script>
+(function () {
+  document.querySelectorAll(".lookup-row").forEach(row => {
+    if (row.dataset.wired === "1") return;
+    row.dataset.wired = "1";
+    const btn = row.querySelector(".lookup-btn");
+    const status = row.querySelector(".lookup-status");
+    const form = row.closest("form");
+    if (!btn || !form) return;
+    btn.addEventListener("click", async () => {
+      const symbol = form.querySelector("[name=symbol]")?.value?.trim();
+      const isin = form.querySelector("[name=isin]")?.value?.trim();
+      if (!symbol && !isin) {
+        status.className = "lookup-status err";
+        status.textContent = "Enter a ticker or ISIN first.";
+        return;
+      }
+      btn.disabled = true;
+      status.className = "lookup-status muted";
+      status.textContent = "Looking up…";
+      try {
+        const params = new URLSearchParams();
+        if (symbol) params.set("symbol", symbol);
+        if (isin)   params.set("isin", isin);
+        const res = await fetch("/api/asset-lookup?" + params).then(r => r.json());
+        if (!res.ok) {
+          status.className = "lookup-status err";
+          status.textContent = res.error || "Lookup failed.";
+          return;
+        }
+        const set = (sel, val, force = false) => {
+          const el = form.querySelector(sel);
+          if (!el || val == null || val === "") return;
+          if (force || !el.value) el.value = val;
+        };
+        set("[name=symbol]", res.symbol, true);
+        if (res.isin) set("[name=isin]", res.isin, true);
+        set("[name=name]", res.name);
+        set("[name=currency]", res.currency);
+        set("[name=sector]", res.sector);
+        set("[name=country]", (res.country || "").slice(0, 2).toUpperCase());
+        const it = form.querySelector("[name=instrument_type]");
+        if (it && res.instrument_type && !it.dataset.userTouched) {
+          for (const o of it.options) if (o.value === res.instrument_type) { it.value = res.instrument_type; break; }
+        }
+        const ac = form.querySelector("[name=asset_class]");
+        if (ac && res.asset_class && !ac.dataset.userTouched) {
+          for (const o of ac.options) if (o.value === res.asset_class) { ac.value = res.asset_class; break; }
+        }
+        status.className = "lookup-status ok";
+        const bits = [res.source && `via ${res.source}`, res.exchange, res.country].filter(Boolean).join(" · ");
+        status.textContent = res.error
+          ? `Warning: ${res.error}`
+          : `Resolved: ${res.name || res.symbol}${bits ? " · " + bits : ""}`;
+        if (res.error) status.classList.add("err");
+      } catch (e) {
+        status.className = "lookup-status err";
+        status.textContent = "Network error: " + e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+})();
+</script>

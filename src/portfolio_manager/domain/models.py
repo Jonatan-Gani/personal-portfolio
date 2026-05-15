@@ -28,6 +28,7 @@ class Asset(BaseModel):
     """Asset metadata. Holdings (quantity, avg cost) are derived from transactions."""
     asset_id: str = Field(default_factory=_new_id)
     symbol: Optional[str] = None
+    isin: Optional[str] = None
     name: str
     instrument_type: InstrumentType
     asset_class: AssetClass
