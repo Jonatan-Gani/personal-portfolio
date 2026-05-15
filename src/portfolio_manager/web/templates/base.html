@@ -24,10 +24,10 @@
     <nav>
       {% set p = (request.url.path if request else '/') %}
       <a href="/"             class="{{ 'active' if p == '/' }}">Dashboard</a>
+      <a href="/transactions" class="{{ 'active' if p.startswith('/transactions') or p.startswith('/import') }}">Transactions</a>
       <a href="/holdings"     class="{{ 'active' if p.startswith('/holdings') or p.startswith('/assets') or p.startswith('/cash') }}">Holdings</a>
       <a href="/liabilities"  class="{{ 'active' if p.startswith('/liabilities') }}">Debts</a>
       <a href="/accounts"     class="{{ 'active' if p.startswith('/accounts') }}">Accounts</a>
-      <a href="/transactions" class="{{ 'active' if p.startswith('/transactions') or p.startswith('/import') }}">Transactions</a>
       <a href="/returns"      class="{{ 'active' if p.startswith('/returns') }}">Performance</a>
       <a href="/compare"      class="{{ 'active' if p.startswith('/compare') }}">Compare</a>
       <a href="/income"       class="{{ 'active' if p.startswith('/income') }}">Income</a>

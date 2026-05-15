@@ -27,6 +27,9 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.10",
 ]
+ibkr = [
+    "ib_insync>=0.9.86",
+]
 
 [project.scripts]
 portfolio = "portfolio_manager.cli:app"

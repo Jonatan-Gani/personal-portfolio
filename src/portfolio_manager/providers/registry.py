@@ -18,6 +18,7 @@ _FX_MODULES: dict[str, str] = {
 }
 _PRICE_MODULES: dict[str, str] = {
     "yfinance": "portfolio_manager.providers.yfinance_price",
+    "ibkr": "portfolio_manager.providers.ibkr_price",
     "mock": "portfolio_manager.providers.mock",
 }
 

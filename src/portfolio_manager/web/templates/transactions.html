@@ -49,75 +49,25 @@
           </select>
         </label>
 
-        <label class="field">Account filter
-          <select id="tx-account-filter">
-            <option value="">— all accounts —</option>
-            {% for a in accounts %}<option value="{{ a.account_id }}">{{ a.name }}{% if a.broker %} · {{ a.broker }}{% endif %}</option>{% endfor %}
-            <option value="__unassigned__">Unassigned</option>
-          </select>
-          <span class="hint">Narrows the position picker below.</span>
-        </label>
-
-        <label class="field span-2" id="tx-entity-field">
-          Position
-          <select name="entity" id="tx-entity" required>
-            <option value="new">+ Create new position…</option>
-            <optgroup label="Assets">
-              {% for a in assets %}
-                <option value="asset:{{ a.asset_id }}"
-                        data-kind="asset"
-                        data-account="{{ a.account_id or '__unassigned__' }}"
-                        data-currency="{{ a.currency }}"
-                        data-symbol="{{ a.symbol or '' }}"
-                        data-isin="{{ a.isin or '' }}">
-                  {{ a.name }}{% if a.symbol %} · {{ a.symbol }}{% endif %} ({{ a.currency }})
-                </option>
-              {% endfor %}
-            </optgroup>
-            <optgroup label="Cash accounts">
-              {% for ca in cash_accounts %}
-                <option value="cash:{{ ca.cash_id }}"
-                        data-kind="cash"
-                        data-account="{{ ca.account_id or '__unassigned__' }}"
-                        data-currency="{{ ca.currency }}">
-                  {{ ca.account_name }} ({{ ca.currency }})
-                </option>
-              {% endfor %}
-            </optgroup>
-            <optgroup label="Liabilities">
-              {% for l in liabilities %}
-                <option value="liability:{{ l.liability_id }}"
-                        data-kind="liability"
-                        data-account="{{ l.account_id or '__unassigned__' }}"
-                        data-currency="{{ l.currency }}">
-                  {{ l.name }} ({{ l.currency }})
-                </option>
-              {% endfor %}
-            </optgroup>
-          </select>
-          <span class="hint" id="tx-entity-hint"></span>
-        </label>
-
-        <label class="field" id="tx-new-kind-field" hidden>New position type
-          <select name="new_kind" id="tx-new-kind">
-            <option value="asset">Asset (stock, ETF, fund, etc.)</option>
+        <label class="field" id="tx-kind-field" hidden>Position kind
+          <select name="kind" id="tx-kind">
+            <option value="asset">Asset</option>
             <option value="cash">Cash account</option>
-            <option value="liability">Liability (loan, mortgage, etc.)</option>
+            <option value="liability">Liability</option>
           </select>
-          <span class="hint">Defaults can be refined later on the position's own page.</span>
+          <span class="hint">Only needed for opening balance.</span>
         </label>
 
-        <label class="field" id="tx-new-name-field" hidden>Name
-          <input name="new_name" id="tx-new-name" placeholder="e.g. Apple Inc. / Chase Checking">
+        <label class="field" id="tx-symbol-field">Symbol
+          <input name="symbol" id="tx-symbol" placeholder="e.g. AAPL" autocomplete="off">
         </label>
 
-        <label class="field" id="tx-new-symbol-field" hidden>Symbol
-          <input name="new_symbol" id="tx-new-symbol" placeholder="e.g. AAPL (optional)">
-          <span class="hint">Used to fetch live prices later.</span>
+        <label class="field" id="tx-name-field">Name
+          <input name="name" id="tx-name" placeholder="e.g. Apple Inc. / Chase Checking" autocomplete="off">
         </label>
 
-        <label class="field" id="tx-new-account-field" hidden>Account
-          <select name="new_account_id" id="tx-new-account">
+        <label class="field">Account
+          <select name="account_id" id="tx-account">
             <option value="">— unassigned —</option>
             {% for a in accounts %}<option value="{{ a.account_id }}">{{ a.name }}{% if a.broker %} · {{ a.broker }}{% endif %}</option>{% endfor %}
           </select>
@@ -139,8 +89,7 @@
         </label>
 
         <label class="field" data-show="all">Currency
-          <input name="currency" id="tx-currency" maxlength="3" list="ccy-list">
-          <span class="hint">Auto-filled from the position.</span>
+          <input name="currency" id="tx-currency" maxlength="3" list="ccy-list" placeholder="USD, EUR, …">
         </label>
 
         <label class="field" data-show="buy,sell,deposit,withdraw,dividend,interest,repayment">Fees
@@ -165,11 +114,13 @@
 
 <script>
 (function () {
-  // Field visibility is driven by `data-show` on each .field. "all" means show always.
+  // The form is transaction-first: the user types what they bought/deposited and
+  // the position is matched-or-created server-side from (account, symbol or name).
   const TYPE = document.getElementById("tx-type");
-  const ACCOUNT_FILTER = document.getElementById("tx-account-filter");
-  const ENTITY = document.getElementById("tx-entity");
-  const ENTITY_HINT = document.getElementById("tx-entity-hint");
+  const KIND_FIELD = document.getElementById("tx-kind-field");
+  const KIND = document.getElementById("tx-kind");
+  const SYMBOL_FIELD = document.getElementById("tx-symbol-field");
+  const NAME_FIELD = document.getElementById("tx-name-field");
   const QTY = document.getElementById("tx-qty");
   const PRICE = document.getElementById("tx-price");
   const AMOUNT = document.getElementById("tx-amount");
@@ -177,32 +128,17 @@
   const CURRENCY = document.getElementById("tx-currency");
   const DATE = document.getElementById("tx-date");
   const SUMMARY = document.getElementById("tx-summary");
-  const NEW_KIND_FIELD = document.getElementById("tx-new-kind-field");
-  const NEW_NAME_FIELD = document.getElementById("tx-new-name-field");
-  const NEW_SYMBOL_FIELD = document.getElementById("tx-new-symbol-field");
-  const NEW_ACCOUNT_FIELD = document.getElementById("tx-new-account-field");
-  const NEW_KIND = document.getElementById("tx-new-kind");
-  const NEW_NAME = document.getElementById("tx-new-name");
-  const NEW_ACCOUNT = document.getElementById("tx-new-account");
 
-  // Default to today
   if (DATE && !DATE.value) DATE.value = new Date().toISOString().slice(0, 10);
 
-  // Which entity kinds are valid for each transaction type. Used to filter
-  // the entity picker so users can only choose sensible combinations.
-  const KIND_FOR_TYPE = {
-    buy:               ["asset"],
-    sell:              ["asset"],
-    split:             ["asset"],
-    deposit:           ["cash"],
-    withdraw:          ["cash"],
-    dividend:          ["cash", "asset"],
-    interest:          ["cash", "asset"],
-    fee:               ["cash", "asset"],
-    repayment:         ["liability"],
-    principal_change:  ["liability"],
-    opening_balance:   ["asset", "cash", "liability"],
-  };
+  // Map transaction-type → effective position kind. Only opening_balance is ambiguous.
+  function effectiveKind() {
+    const t = TYPE.value;
+    if (t === "buy" || t === "sell" || t === "split") return "asset";
+    if (t === "deposit" || t === "withdraw" || t === "dividend" || t === "interest" || t === "fee") return "cash";
+    if (t === "repayment" || t === "principal_change") return "liability";
+    return KIND.value;  // opening_balance
+  }
 
   function applyTypeVisibility() {
     const t = TYPE.value;
@@ -210,7 +146,15 @@
       const tokens = el.dataset.show.split(",");
       el.style.display = (tokens.includes("all") || tokens.includes(t)) ? "" : "none";
     });
-    // Update friendly hint on Quantity for splits
+    KIND_FIELD.hidden = (t !== "opening_balance");
+
+    const k = effectiveKind();
+    // Symbol only applies to assets. Name labels itself based on kind.
+    SYMBOL_FIELD.hidden = (k !== "asset");
+    if (k === "cash") NAME_FIELD.firstChild.textContent = "Cash account name";
+    else if (k === "liability") NAME_FIELD.firstChild.textContent = "Liability name";
+    else NAME_FIELD.firstChild.textContent = "Name";
+
     const qHint = document.getElementById("tx-qty-hint");
     if (qHint) {
       qHint.textContent = t === "split"
@@ -226,91 +170,6 @@
       else if (t === "principal_change") aHint.textContent = "Positive: principal increased. Negative: principal decreased.";
       else if (t === "opening_balance") aHint.textContent = "Starting balance for this position.";
       else aHint.textContent = "";
-    }
-  }
-
-  function refilterEntityOptions() {
-    const t = TYPE.value;
-    const validKinds = KIND_FOR_TYPE[t] || ["asset", "cash", "liability"];
-    const wantedAccount = ACCOUNT_FILTER.value;
-
-    let firstVisible = null;
-    let visibleCount = 0;
-    Array.from(ENTITY.options).forEach(opt => {
-      if (!opt.dataset.kind) return; // optgroup labels and the "new" sentinel
-      const kindOk = validKinds.includes(opt.dataset.kind);
-      const acctOk = !wantedAccount || opt.dataset.account === wantedAccount;
-      const ok = kindOk && acctOk;
-      opt.hidden = !ok;
-      opt.disabled = !ok;
-      if (ok) {
-        visibleCount++;
-        if (!firstVisible) firstVisible = opt;
-      }
-    });
-
-    // Hide entire optgroups that have no visible children.
-    Array.from(ENTITY.querySelectorAll("optgroup")).forEach(g => {
-      const anyVisible = Array.from(g.children).some(o => !o.hidden);
-      g.hidden = !anyVisible;
-    });
-
-    // Restrict the new-kind dropdown to kinds valid for this transaction type.
-    let firstValidNewKind = null;
-    Array.from(NEW_KIND.options).forEach(opt => {
-      const ok = validKinds.includes(opt.value);
-      opt.hidden = !ok;
-      opt.disabled = !ok;
-      if (ok && !firstValidNewKind) firstValidNewKind = opt.value;
-    });
-    if (NEW_KIND.selectedOptions[0] && NEW_KIND.selectedOptions[0].disabled && firstValidNewKind) {
-      NEW_KIND.value = firstValidNewKind;
-    }
-
-    // If the current selection is a now-hidden existing entity, switch to the first
-    // visible existing one — or to "new" when none are available for this type.
-    if (ENTITY.value !== "new" && ENTITY.selectedOptions[0] && ENTITY.selectedOptions[0].hidden) {
-      ENTITY.value = firstVisible ? firstVisible.value : "new";
-    }
-
-    if (ENTITY.value !== "new") {
-      if (visibleCount === 1) {
-        ENTITY_HINT.textContent = `One position available.`;
-      } else {
-        ENTITY_HINT.textContent = `${visibleCount} positions available.`;
-      }
-    }
-    applyNewEntityMode();
-    inheritFromEntity();
-  }
-
-  function applyNewEntityMode() {
-    const creating = ENTITY.value === "new";
-    NEW_KIND_FIELD.hidden = !creating;
-    NEW_NAME_FIELD.hidden = !creating;
-    NEW_ACCOUNT_FIELD.hidden = !creating;
-    NEW_SYMBOL_FIELD.hidden = !creating || NEW_KIND.value !== "asset";
-    NEW_NAME.required = creating;
-    if (creating) {
-      // No entity is selected, so we can't inherit currency — make the user pick it.
-      CURRENCY.required = true;
-      CURRENCY.placeholder = "USD, EUR, …";
-      ENTITY_HINT.textContent = "Filling in a new position. You can refine the details later on its page.";
-      // Default the new account selector to the account filter if one is chosen.
-      if (NEW_ACCOUNT && !NEW_ACCOUNT.dataset.userTouched && ACCOUNT_FILTER.value && ACCOUNT_FILTER.value !== "__unassigned__") {
-        NEW_ACCOUNT.value = ACCOUNT_FILTER.value;
-      }
-    } else {
-      CURRENCY.required = false;
-      CURRENCY.placeholder = "";
-    }
-  }
-
-  function inheritFromEntity() {
-    const opt = ENTITY.selectedOptions[0];
-    if (!opt || ENTITY.value === "new") return;
-    if (CURRENCY && !CURRENCY.dataset.userTouched) {
-      CURRENCY.value = opt.dataset.currency || "";
     }
   }
 
@@ -332,31 +191,20 @@
     } else if (t === "split" && !isNaN(q)) {
       SUMMARY.innerHTML = `Shares are multiplied by <strong>${q}</strong>. No cash movement.`;
     } else if (t === "opening_balance") {
-      const opt = ENTITY.selectedOptions[0];
-      if (opt && opt.dataset.kind === "asset") {
-        SUMMARY.innerHTML = `Opening balance for an asset: enter <em>Quantity</em> only.`;
-      } else {
-        SUMMARY.innerHTML = `Opening balance: enter <em>Amount</em>.`;
-      }
+      SUMMARY.innerHTML = effectiveKind() === "asset"
+        ? `Opening balance for an asset: enter <em>Quantity</em> only.`
+        : `Opening balance: enter <em>Amount</em>.`;
     } else {
       SUMMARY.textContent = "";
     }
   }
 
-  TYPE.addEventListener("change", () => { applyTypeVisibility(); refilterEntityOptions(); recompute(); });
-  ACCOUNT_FILTER.addEventListener("change", refilterEntityOptions);
-  ENTITY.addEventListener("change", () => { applyNewEntityMode(); inheritFromEntity(); recompute(); });
-  NEW_KIND.addEventListener("change", applyNewEntityMode);
-  NEW_ACCOUNT.addEventListener("change", () => { NEW_ACCOUNT.dataset.userTouched = "1"; });
+  TYPE.addEventListener("change", () => { applyTypeVisibility(); recompute(); });
+  KIND.addEventListener("change", () => { applyTypeVisibility(); recompute(); });
   [QTY, PRICE, FEES].forEach(el => el && el.addEventListener("input", recompute));
   AMOUNT.addEventListener("input", () => { AMOUNT.dataset.userTouched = "1"; });
-  CURRENCY.addEventListener("input", () => { CURRENCY.dataset.userTouched = "1"; });
 
   applyTypeVisibility();
-  // Prefer a real existing entity on first load; fall back to "new" if there is none.
-  const firstReal = Array.from(ENTITY.options).find(o => o.dataset.kind && !o.disabled && !o.hidden);
-  if (firstReal) ENTITY.value = firstReal.value;
-  refilterEntityOptions();
 })();
 </script>
 

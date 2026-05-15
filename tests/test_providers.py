@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 
 from portfolio_manager.providers.ecb_fx import _parse_latest_obs
@@ -27,6 +29,34 @@ def test_registry_builds_known_providers():
     assert build_price_provider("mock", {}).name == "mock"
     assert build_fx_provider("ecb", {}).name == "ecb"
     assert build_price_provider("yfinance", {}).name == "yfinance"
+    assert build_price_provider("ibkr", {}).name == "ibkr"
+
+
+def test_ibkr_contract_parsing():
+    """Symbols resolve to (ticker, exchange, currency), falling back to defaults."""
+    ib_insync = pytest.importorskip("ib_insync")
+    assert ib_insync  # silence unused
+    from portfolio_manager.providers.ibkr_price import IBKRPriceProvider
+
+    p = IBKRPriceProvider(exchange="SMART", currency="USD")
+    bare = p._contract("AAPL")
+    assert (bare.symbol, bare.exchange, bare.currency) == ("AAPL", "SMART", "USD")
+
+    qualified = p._contract("vod:lse:gbp")
+    assert (qualified.symbol, qualified.exchange, qualified.currency) == ("VOD", "LSE", "GBP")
+
+
+def test_ibkr_connection_failure_is_price_unavailable():
+    """A missing gateway must surface as PriceUnavailable, never a raw socket error."""
+    pytest.importorskip("ib_insync")
+    from portfolio_manager.domain.exceptions import PriceUnavailable
+    from portfolio_manager.providers.ibkr_price import IBKRPriceProvider
+
+    p = IBKRPriceProvider(port=9, timeout_seconds=2, client_id=987)
+    with pytest.raises(PriceUnavailable):
+        p.get_price("AAPL")
+    # get_history degrades to an empty list rather than raising.
+    assert p.get_history("AAPL", date(2025, 1, 1)) == []
 
 
 def test_registry_unknown_raises():

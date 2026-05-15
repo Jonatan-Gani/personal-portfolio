@@ -25,7 +25,7 @@ def _parse_date(s: str | None) -> date | None:
 
 
 def _split_entity(entity: str) -> tuple[PositionKind, str]:
-    """Parse the friendly entity picker value `<kind>:<id>` back into our enum + id."""
+    """Parse the legacy `<kind>:<id>` form value used by the update endpoint."""
     if ":" not in entity:
         raise HTTPException(400, "entity must be in the form '<kind>:<id>'")
     kind_str, _, eid = entity.partition(":")
@@ -38,54 +38,94 @@ def _split_entity(entity: str) -> tuple[PositionKind, str]:
     return kind, eid
 
 
-def _create_entity_stub(
+def _kind_from_type(ttype: TransactionType, kind_override: str | None) -> PositionKind:
+    """Most transaction types determine their entity kind. Only opening_balance is
+    ambiguous and needs the caller to supply one."""
+    if ttype in (TransactionType.BUY, TransactionType.SELL, TransactionType.SPLIT):
+        return PositionKind.ASSET
+    if ttype in (
+        TransactionType.DEPOSIT, TransactionType.WITHDRAW,
+        TransactionType.DIVIDEND, TransactionType.INTEREST, TransactionType.FEE,
+    ):
+        return PositionKind.CASH
+    if ttype in (TransactionType.REPAYMENT, TransactionType.PRINCIPAL_CHANGE):
+        return PositionKind.LIABILITY
+    # opening_balance
+    if not kind_override:
+        raise HTTPException(400, "kind is required for opening_balance transactions")
+    try:
+        return PositionKind(kind_override)
+    except ValueError as e:
+        raise HTTPException(400, f"unknown position kind {kind_override!r}") from e
+
+
+def _resolve_or_create_entity(
     c,
     *,
-    new_kind: str | None,
-    new_name: str | None,
-    new_symbol: str | None,
-    new_account_id: str | None,
+    kind: PositionKind,
+    symbol: str | None,
+    name: str | None,
+    account_id: str | None,
     currency: str | None,
-) -> tuple[PositionKind, str, str]:
-    """Create a minimal Asset/Cash/Liability so a transaction can reference it.
+) -> tuple[str, str]:
+    """Find an existing entity matching (account, symbol-or-name) for this kind, or
+    create a new one. Returns (entity_id, entity_currency).
 
-    Returns (kind, entity_id, currency). The user can fill in classification,
-    pricing-provider, etc. later on the entity's own page.
+    Match rule:
+      - asset: same account_id AND (symbol matches when provided, else name matches)
+      - cash/liability: same account_id AND name matches (case-insensitive)
     """
-    if not new_kind:
-        raise HTTPException(400, "kind is required when creating a new position")
-    if not new_name or not new_name.strip():
-        raise HTTPException(400, "name is required when creating a new position")
-    if not currency or not currency.strip():
-        raise HTTPException(400, "currency is required when creating a new position")
-    try:
-        kind = PositionKind(new_kind)
-    except ValueError as e:
-        raise HTTPException(400, f"unknown position kind {new_kind!r}") from e
-
-    name = new_name.strip()
-    ccy = currency.strip().upper()
-    acct = (new_account_id or "").strip() or None
+    sym = (symbol or "").strip().upper() or None
+    nm = (name or "").strip() or None
+    acct = (account_id or "").strip() or None
+    ccy = (currency or "").strip().upper() or None
 
     if kind is PositionKind.ASSET:
-        sym = (new_symbol or "").strip().upper() or None
-        a = c.portfolio.add_asset(Asset(
-            name=name, symbol=sym, currency=ccy, account_id=acct,
+        if not sym and not nm:
+            raise HTTPException(400, "asset transactions need a symbol or name")
+        for a in c.portfolio.list_assets(include_inactive=True):
+            if a.account_id != acct:
+                continue
+            if sym and a.symbol and a.symbol.upper() == sym:
+                return a.asset_id, a.currency
+            if not sym and nm and a.name.strip().lower() == nm.lower():
+                return a.asset_id, a.currency
+        if not ccy:
+            raise HTTPException(400, "currency is required for a new asset")
+        created = c.portfolio.add_asset(Asset(
+            name=nm or sym or "Unnamed", symbol=sym, currency=ccy, account_id=acct,
             instrument_type=InstrumentType.OTHER, asset_class=AssetClass.OTHER,
         ))
-        return kind, a.asset_id, a.currency
+        return created.asset_id, created.currency
+
     if kind is PositionKind.CASH:
-        ca = c.portfolio.add_cash(CashHolding(
-            account_name=name, currency=ccy, account_id=acct,
+        if not nm:
+            raise HTTPException(400, "cash transactions need a cash-account name")
+        for ca in c.portfolio.list_cash(include_inactive=True):
+            if ca.account_id == acct and ca.account_name.strip().lower() == nm.lower():
+                return ca.cash_id, ca.currency
+        if not ccy:
+            raise HTTPException(400, "currency is required for a new cash account")
+        created = c.portfolio.add_cash(CashHolding(
+            account_name=nm, currency=ccy, account_id=acct,
         ))
-        return kind, ca.cash_id, ca.currency
+        return created.cash_id, created.currency
+
     if kind is PositionKind.LIABILITY:
-        lia = c.portfolio.add_liability(Liability(
-            name=name, currency=ccy, account_id=acct,
+        if not nm:
+            raise HTTPException(400, "liability transactions need a name")
+        for li in c.portfolio.list_liabilities(include_inactive=True):
+            if li.account_id == acct and li.name.strip().lower() == nm.lower():
+                return li.liability_id, li.currency
+        if not ccy:
+            raise HTTPException(400, "currency is required for a new liability")
+        created = c.portfolio.add_liability(Liability(
+            name=nm, currency=ccy, account_id=acct,
             liability_type=LiabilityType.OTHER,
         ))
-        return kind, lia.liability_id, lia.currency
-    raise HTTPException(400, f"cannot create entity of kind {kind!r}")
+        return created.liability_id, created.currency
+
+    raise HTTPException(400, f"cannot resolve entity for kind {kind!r}")
 
 
 def _entity_index(c) -> dict[str, dict]:
@@ -184,40 +224,26 @@ def create_transaction(
     request: Request,
     transaction_date: str = Form(...),
     transaction_type: str = Form(...),
-    entity: str = Form(...),                       # '<kind>:<id>' or 'new'
+    symbol: str | None = Form(None),
+    name: str | None = Form(None),
+    account_id: str | None = Form(None),
+    kind: str | None = Form(None),                 # only used for opening_balance
     quantity: float | None = Form(None),
     price: float | None = Form(None),
-    amount: float | None = Form(None),             # may be derived server-side
-    currency: str | None = Form(None),             # may be inherited from entity
+    amount: float | None = Form(None),
+    currency: str | None = Form(None),
     fees: float = Form(0.0),
     notes: str | None = Form(None),
-    # New-position fields — only used when entity == "new".
-    new_kind: str | None = Form(None),
-    new_name: str | None = Form(None),
-    new_symbol: str | None = Form(None),
-    new_account_id: str | None = Form(None),
 ):
     c = request.app.state.container
     ttype = TransactionType(transaction_type)
-
-    if entity == "new":
-        kind, eid, currency = _create_entity_stub(
-            c,
-            new_kind=new_kind,
-            new_name=new_name,
-            new_symbol=new_symbol,
-            new_account_id=new_account_id,
-            currency=currency,
-        )
-    else:
-        kind, eid = _split_entity(entity)
-        # Auto-inherit currency from the entity if the form didn't supply one.
-        if not currency:
-            idx = _entity_index(c)
-            e = idx.get(f"{kind.value}:{eid}")
-            if not e:
-                raise HTTPException(400, f"unknown entity {entity!r}")
-            currency = e["currency"]
+    ekind = _kind_from_type(ttype, kind)
+    eid, entity_currency = _resolve_or_create_entity(
+        c, kind=ekind, symbol=symbol, name=name,
+        account_id=account_id, currency=currency,
+    )
+    if not currency:
+        currency = entity_currency
 
     # Derive amount for trade-style transactions if the user didn't override it.
     # Buy/Sell: |amount| = |qty * price| + fees. Sell stays positive (it's the
@@ -235,7 +261,7 @@ def create_transaction(
     tx = Transaction(
         transaction_date=date.fromisoformat(transaction_date),
         transaction_type=ttype,
-        entity_kind=kind,
+        entity_kind=ekind,
         entity_id=eid,
         quantity=quantity,
         price=price,
