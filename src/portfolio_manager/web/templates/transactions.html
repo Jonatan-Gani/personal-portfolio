@@ -4,84 +4,306 @@
 
 <div class="page-header">
   <div class="titles">
-    <span class="eyebrow">Journal</span>
+    <span class="eyebrow">Activity</span>
     <h1>Transactions</h1>
   </div>
-  <div style="display:flex;align-items:end;gap:1rem">
-    <p class="lede" style="margin-right:1rem">The source of truth: every event that changes your holdings or balances. Asset quantities and
-    cash balances are derived by replaying this log up to the snapshot's timestamp.</p>
-    <a class="btn btn-sm" href="/import">↑ Import CSV</a>
+  <div style="display:flex;align-items:end;gap:.5rem">
+    <p class="lede" style="margin-right:1rem">Every buy, sell, deposit, dividend and balance change. Holdings, cost basis,
+      and accrued interest are derived from this log — the source of truth.</p>
+    <a class="btn btn-sm btn-primary" href="/import">↑ Import CSV</a>
     <a class="btn btn-sm" href="/export/transactions.csv">↓ CSV</a>
   </div>
 </div>
 
+{% if import_count %}
+<div class="banner">Imported <strong>{{ import_count }}</strong> transaction{{ '' if import_count == '1' else 's' }}.</div>
+{% endif %}
+
+<!-- ============================================================== Add form -->
 <details class="drawer" {% if not items %}open{% endif %}>
-  <summary>Record transaction</summary>
+  <summary>+ Record a transaction</summary>
   <div class="drawer-body">
-    <form method="post" action="/transactions" class="field-row">
-      <label class="field">Date <input name="transaction_date" type="date" required value="{{ filters.since or '' }}"></label>
-      <label class="field">Type
-        <select name="transaction_type" required>
-          {% for t in transaction_types %}<option value="{{ t }}">{{ t | humanize }}</option>{% endfor %}
-        </select>
-      </label>
-      <label class="field">Entity kind
-        <select name="entity_kind" required id="entity-kind">
-          <option value="asset">asset</option>
-          <option value="cash">cash</option>
-          <option value="liability">liability</option>
-        </select>
-      </label>
-      <label class="field">Entity
-        <select name="entity_id" required id="entity-id">
-          <optgroup label="Assets" data-kind="asset">
-            {% for a in assets %}<option value="{{ a.asset_id }}" data-kind="asset" data-currency="{{ a.currency }}">{{ a.name }} ({{ a.symbol or a.currency }})</option>{% endfor %}
-          </optgroup>
-          <optgroup label="Cash" data-kind="cash">
-            {% for c in cash_accounts %}<option value="{{ c.cash_id }}" data-kind="cash" data-currency="{{ c.currency }}">{{ c.account_name }} ({{ c.currency }})</option>{% endfor %}
-          </optgroup>
-          <optgroup label="Liabilities" data-kind="liability">
-            {% for l in liabilities %}<option value="{{ l.liability_id }}" data-kind="liability" data-currency="{{ l.currency }}">{{ l.name }} ({{ l.currency }})</option>{% endfor %}
-          </optgroup>
-        </select>
-      </label>
-      <label class="field">Quantity
-        <input name="quantity" type="number" step="any" placeholder="for buy/sell/split">
-        <span class="hint">shares or units (split: ratio, e.g. 2 for a 2-for-1)</span>
-      </label>
-      <label class="field">Unit price
-        <input name="price" type="number" step="any" placeholder="for buy/sell">
-      </label>
-      <label class="field">Amount
-        <input name="amount" type="number" step="any" placeholder="for cash flows">
-        <span class="hint">cash flow value (deposit, dividend, fee, opening balance for cash)</span>
-      </label>
-      <label class="field">Currency <input name="currency" required maxlength="3" list="ccy-list"></label>
-      <label class="field">Fees <input name="fees" type="number" step="any" value="0"></label>
-      <label class="field span-2">Notes <input name="notes"></label>
-      <button class="btn btn-primary span-4" style="justify-self:start">Save transaction</button>
+    <form method="post" action="/transactions" id="tx-form">
+      <div class="field-row">
+        <label class="field">What happened?
+          <select name="transaction_type" id="tx-type" required>
+            <optgroup label="Trades">
+              <option value="buy">Buy</option>
+              <option value="sell">Sell</option>
+              <option value="split">Stock split</option>
+            </optgroup>
+            <optgroup label="Cash flows">
+              <option value="deposit">Deposit (cash in)</option>
+              <option value="withdraw">Withdraw (cash out)</option>
+              <option value="dividend">Dividend received</option>
+              <option value="interest">Interest received</option>
+              <option value="fee">Fee paid</option>
+            </optgroup>
+            <optgroup label="Liabilities">
+              <option value="repayment">Loan repayment</option>
+              <option value="principal_change">Principal change</option>
+            </optgroup>
+            <optgroup label="Setup">
+              <option value="opening_balance">Opening balance</option>
+            </optgroup>
+          </select>
+        </label>
+
+        <label class="field">Account filter
+          <select id="tx-account-filter">
+            <option value="">— all accounts —</option>
+            {% for a in accounts %}<option value="{{ a.account_id }}">{{ a.name }}{% if a.broker %} · {{ a.broker }}{% endif %}</option>{% endfor %}
+            <option value="__unassigned__">Unassigned</option>
+          </select>
+          <span class="hint">Narrows the position picker below.</span>
+        </label>
+
+        <label class="field span-2" id="tx-entity-field">
+          Position
+          <select name="entity" id="tx-entity" required>
+            <optgroup label="Assets">
+              {% for a in assets %}
+                <option value="asset:{{ a.asset_id }}"
+                        data-kind="asset"
+                        data-account="{{ a.account_id or '__unassigned__' }}"
+                        data-currency="{{ a.currency }}"
+                        data-symbol="{{ a.symbol or '' }}"
+                        data-isin="{{ a.isin or '' }}">
+                  {{ a.name }}{% if a.symbol %} · {{ a.symbol }}{% endif %} ({{ a.currency }})
+                </option>
+              {% endfor %}
+            </optgroup>
+            <optgroup label="Cash accounts">
+              {% for ca in cash_accounts %}
+                <option value="cash:{{ ca.cash_id }}"
+                        data-kind="cash"
+                        data-account="{{ ca.account_id or '__unassigned__' }}"
+                        data-currency="{{ ca.currency }}">
+                  {{ ca.account_name }} ({{ ca.currency }})
+                </option>
+              {% endfor %}
+            </optgroup>
+            <optgroup label="Liabilities">
+              {% for l in liabilities %}
+                <option value="liability:{{ l.liability_id }}"
+                        data-kind="liability"
+                        data-account="{{ l.account_id or '__unassigned__' }}"
+                        data-currency="{{ l.currency }}">
+                  {{ l.name }} ({{ l.currency }})
+                </option>
+              {% endfor %}
+            </optgroup>
+          </select>
+          <span class="hint" id="tx-entity-hint"></span>
+        </label>
+
+        <label class="field" data-show="buy,sell,split,opening_balance">Quantity
+          <input name="quantity" id="tx-qty" type="number" step="any" placeholder="shares / units">
+          <span class="hint" id="tx-qty-hint">Number of shares. For a split, enter the ratio (e.g. 2 for 2-for-1).</span>
+        </label>
+
+        <label class="field" data-show="buy,sell">Unit price
+          <input name="price" id="tx-price" type="number" step="any" placeholder="price per share">
+        </label>
+
+        <label class="field" data-show="buy,sell,deposit,withdraw,dividend,interest,fee,repayment,principal_change,opening_balance">
+          Amount
+          <input name="amount" id="tx-amount" type="number" step="any">
+          <span class="hint" id="tx-amount-hint">For buys/sells this is auto-computed from quantity × price ± fees.</span>
+        </label>
+
+        <label class="field" data-show="all">Currency
+          <input name="currency" id="tx-currency" maxlength="3" list="ccy-list">
+          <span class="hint">Auto-filled from the position.</span>
+        </label>
+
+        <label class="field" data-show="buy,sell,deposit,withdraw,dividend,interest,repayment">Fees
+          <input name="fees" id="tx-fees" type="number" step="any" value="0">
+        </label>
+
+        <label class="field" data-show="all">Date
+          <input name="transaction_date" id="tx-date" type="date" required>
+        </label>
+
+        <label class="field span-3" data-show="all">Notes
+          <input name="notes" placeholder="optional context">
+        </label>
+
+        <div class="span-4" id="tx-summary" style="font-size:12.5px;color:var(--text-mute);padding:.5rem .75rem;background:var(--surface-alt);border-radius:var(--radius-sm);min-height:1em"></div>
+
+        <button class="btn btn-primary span-4" style="justify-self:start" id="tx-submit">Save transaction</button>
+      </div>
     </form>
-    <p class="muted" style="font-size:12px;margin-top:.85rem">
-      Quick guide: <strong>Opening balance</strong> sets initial state · <strong>Buy / Sell</strong> changes asset quantity ·
-      <strong>Deposit / Withdraw / Dividend / Fee / Interest</strong> changes a cash balance ·
-      <strong>Repayment / Principal change</strong> changes liability principal · <strong>Split</strong> multiplies asset quantity by the ratio in <em>quantity</em>.
-    </p>
   </div>
 </details>
 
+<script>
+(function () {
+  // Field visibility is driven by `data-show` on each .field. "all" means show always.
+  const TYPE = document.getElementById("tx-type");
+  const ACCOUNT_FILTER = document.getElementById("tx-account-filter");
+  const ENTITY = document.getElementById("tx-entity");
+  const ENTITY_HINT = document.getElementById("tx-entity-hint");
+  const QTY = document.getElementById("tx-qty");
+  const PRICE = document.getElementById("tx-price");
+  const AMOUNT = document.getElementById("tx-amount");
+  const FEES = document.getElementById("tx-fees");
+  const CURRENCY = document.getElementById("tx-currency");
+  const DATE = document.getElementById("tx-date");
+  const SUMMARY = document.getElementById("tx-summary");
+
+  // Default to today
+  if (DATE && !DATE.value) DATE.value = new Date().toISOString().slice(0, 10);
+
+  // Which entity kinds are valid for each transaction type. Used to filter
+  // the entity picker so users can only choose sensible combinations.
+  const KIND_FOR_TYPE = {
+    buy:               ["asset"],
+    sell:              ["asset"],
+    split:             ["asset"],
+    deposit:           ["cash"],
+    withdraw:          ["cash"],
+    dividend:          ["cash", "asset"],
+    interest:          ["cash", "asset"],
+    fee:               ["cash", "asset"],
+    repayment:         ["liability"],
+    principal_change:  ["liability"],
+    opening_balance:   ["asset", "cash", "liability"],
+  };
+
+  function applyTypeVisibility() {
+    const t = TYPE.value;
+    document.querySelectorAll("[data-show]").forEach(el => {
+      const tokens = el.dataset.show.split(",");
+      el.style.display = (tokens.includes("all") || tokens.includes(t)) ? "" : "none";
+    });
+    // Update friendly hint on Quantity for splits
+    const qHint = document.getElementById("tx-qty-hint");
+    if (qHint) {
+      qHint.textContent = t === "split"
+        ? "Split ratio: 2 means 2-for-1 (quantity doubles)."
+        : "Number of shares or units.";
+    }
+    const aHint = document.getElementById("tx-amount-hint");
+    if (aHint) {
+      if (t === "buy") aHint.textContent = "Auto-computed: quantity × price + fees. Override if needed.";
+      else if (t === "sell") aHint.textContent = "Auto-computed: quantity × price − fees. Override if needed.";
+      else if (t === "deposit" || t === "dividend" || t === "interest") aHint.textContent = "Cash amount received.";
+      else if (t === "withdraw" || t === "fee" || t === "repayment") aHint.textContent = "Cash amount paid.";
+      else if (t === "principal_change") aHint.textContent = "Positive: principal increased. Negative: principal decreased.";
+      else if (t === "opening_balance") aHint.textContent = "Starting balance for this position.";
+      else aHint.textContent = "";
+    }
+  }
+
+  function refilterEntityOptions() {
+    const t = TYPE.value;
+    const validKinds = KIND_FOR_TYPE[t] || ["asset", "cash", "liability"];
+    const wantedAccount = ACCOUNT_FILTER.value;
+
+    let firstVisible = null;
+    let visibleCount = 0;
+    Array.from(ENTITY.options).forEach(opt => {
+      if (!opt.dataset.kind) return; // optgroup label rows aren't real options
+      const kindOk = validKinds.includes(opt.dataset.kind);
+      const acctOk = !wantedAccount || opt.dataset.account === wantedAccount;
+      const ok = kindOk && acctOk;
+      opt.hidden = !ok;
+      opt.disabled = !ok;
+      if (ok) {
+        visibleCount++;
+        if (!firstVisible) firstVisible = opt;
+      }
+    });
+
+    // Hide entire optgroups that have no visible children.
+    Array.from(ENTITY.querySelectorAll("optgroup")).forEach(g => {
+      const anyVisible = Array.from(g.children).some(o => !o.hidden);
+      g.hidden = !anyVisible;
+    });
+
+    if (visibleCount === 0) {
+      ENTITY_HINT.innerHTML = '<span style="color:var(--neg)">No positions match. Add one on Accounts, Holdings, or Liabilities first.</span>';
+    } else if (visibleCount === 1) {
+      ENTITY_HINT.textContent = `One position available.`;
+    } else {
+      ENTITY_HINT.textContent = `${visibleCount} positions available.`;
+    }
+    if (ENTITY.selectedOptions[0] && ENTITY.selectedOptions[0].hidden && firstVisible) {
+      ENTITY.value = firstVisible.value;
+    }
+    inheritFromEntity();
+  }
+
+  function inheritFromEntity() {
+    const opt = ENTITY.selectedOptions[0];
+    if (!opt) return;
+    if (CURRENCY && !CURRENCY.dataset.userTouched) {
+      CURRENCY.value = opt.dataset.currency || "";
+    }
+  }
+
+  function recompute() {
+    const t = TYPE.value;
+    const q = parseFloat(QTY.value);
+    const p = parseFloat(PRICE.value);
+    const f = parseFloat(FEES.value) || 0;
+    if ((t === "buy" || t === "sell") && !isNaN(q) && !isNaN(p)) {
+      let total = Math.abs(q * p);
+      total += (t === "buy") ? f : -f;
+      if (!AMOUNT.dataset.userTouched) AMOUNT.value = total.toFixed(2);
+      SUMMARY.innerHTML = `<strong>${t === "buy" ? "Outflow" : "Proceeds"}</strong>: `
+        + `${(q).toLocaleString(undefined, {maximumFractionDigits: 4})} × `
+        + `${p.toLocaleString(undefined, {maximumFractionDigits: 4})} `
+        + (t === "buy" ? `+ ${f}` : `− ${f}`) + ` fees = `
+        + `<strong>${total.toLocaleString(undefined, {maximumFractionDigits: 2})}</strong> `
+        + `<span class="mono">${CURRENCY.value || ""}</span>`;
+    } else if (t === "split" && !isNaN(q)) {
+      SUMMARY.innerHTML = `Shares are multiplied by <strong>${q}</strong>. No cash movement.`;
+    } else if (t === "opening_balance") {
+      const opt = ENTITY.selectedOptions[0];
+      if (opt && opt.dataset.kind === "asset") {
+        SUMMARY.innerHTML = `Opening balance for an asset: enter <em>Quantity</em> only.`;
+      } else {
+        SUMMARY.innerHTML = `Opening balance: enter <em>Amount</em>.`;
+      }
+    } else {
+      SUMMARY.textContent = "";
+    }
+  }
+
+  TYPE.addEventListener("change", () => { applyTypeVisibility(); refilterEntityOptions(); recompute(); });
+  ACCOUNT_FILTER.addEventListener("change", refilterEntityOptions);
+  ENTITY.addEventListener("change", () => { inheritFromEntity(); recompute(); });
+  [QTY, PRICE, FEES].forEach(el => el && el.addEventListener("input", recompute));
+  AMOUNT.addEventListener("input", () => { AMOUNT.dataset.userTouched = "1"; });
+  CURRENCY.addEventListener("input", () => { CURRENCY.dataset.userTouched = "1"; });
+
+  applyTypeVisibility();
+  refilterEntityOptions();
+})();
+</script>
+
+<!-- ============================================================== Filters -->
 <form method="get" class="toolbar">
+  <label class="field">Type
+    <select name="type">
+      <option value="">all</option>
+      {% for t in transaction_types %}<option value="{{ t }}" {% if filters.type == t %}selected{% endif %}>{{ t | humanize }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="field">Account
+    <select name="account">
+      <option value="">all</option>
+      {% for a in accounts %}<option value="{{ a.account_id }}" {% if filters.account == a.account_id %}selected{% endif %}>{{ a.name }}{% if a.broker %} · {{ a.broker }}{% endif %}</option>{% endfor %}
+    </select>
+  </label>
   <label class="field">Kind
     <select name="kind">
       <option value="">all</option>
       <option value="asset"     {% if filters.kind == 'asset' %}selected{% endif %}>Assets</option>
       <option value="cash"      {% if filters.kind == 'cash' %}selected{% endif %}>Cash</option>
       <option value="liability" {% if filters.kind == 'liability' %}selected{% endif %}>Liabilities</option>
-    </select>
-  </label>
-  <label class="field">Type
-    <select name="type">
-      <option value="">all</option>
-      {% for t in transaction_types %}<option value="{{ t }}" {% if filters.type == t %}selected{% endif %}>{{ t | humanize }}</option>{% endfor %}
     </select>
   </label>
   <label class="field">Since
@@ -92,18 +314,20 @@
   </label>
   {% if filters.entity_id %}<input type="hidden" name="entity_id" value="{{ filters.entity_id }}">{% endif %}
   <button class="btn">Filter</button>
-  {% if filters.kind or filters.type or filters.since or filters.until or filters.entity_id %}
+  {% if filters.kind or filters.type or filters.since or filters.until or filters.entity_id or filters.account %}
   <a class="btn btn-ghost" href="/transactions">clear</a>
   {% endif %}
 </form>
 
+<!-- ============================================================== Table -->
 <div class="card">
   <table class="data">
     <thead>
       <tr>
         <th>Date</th>
         <th>Type</th>
-        <th>Entity</th>
+        <th>Position</th>
+        <th>Account</th>
         <th class="num">Quantity</th>
         <th class="num">Price</th>
         <th class="num">Amount</th>
@@ -115,16 +339,20 @@
     </thead>
     <tbody>
       {% for tx in items %}
-      {% set name =
-        asset_names.get(tx.entity_id) if tx.entity_kind.value == 'asset'
-        else cash_names.get(tx.entity_id) if tx.entity_kind.value == 'cash'
-        else liab_names.get(tx.entity_id, tx.entity_id) %}
+      {% set e = entity_idx.get(tx.entity_kind.value ~ ':' ~ tx.entity_id, {}) %}
       <tr>
         <td class="mono">{{ tx.transaction_date }}</td>
         <td><span class="pill kind-{{ tx.entity_kind.value }}">{{ tx.transaction_type.value | humanize }}</span></td>
         <td>
-          <strong>{{ name or tx.entity_id[:8] }}</strong>
-          <div class="meta">{{ tx.entity_kind.value | humanize }}</div>
+          <strong>{{ e.name or tx.entity_id[:8] }}</strong>
+          {% if e.symbol %}<span class="mono faint" style="font-size:11px">· {{ e.symbol }}</span>{% endif %}
+          <div class="meta">{{ tx.entity_kind.value | humanize }}{% if e.isin %} · <span class="mono">{{ e.isin }}</span>{% endif %}</div>
+        </td>
+        <td>
+          {% if e.account_name %}
+            <span>{{ e.account_name }}</span>
+            {% if e.account_broker %}<div class="meta faint">{{ e.account_broker }}</div>{% endif %}
+          {% else %}<span class="faint">— Unassigned —</span>{% endif %}
         </td>
         <td class="num">{{ "{:,.4f}".format(tx.quantity) if tx.quantity is not none else '—' }}</td>
         <td class="num">{{ "{:,.4f}".format(tx.price) if tx.price is not none else '—' }}</td>
@@ -140,38 +368,10 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="10" class="table-empty">No transactions yet — record one above.</td></tr>
+      <tr><td colspan="11" class="table-empty">No transactions match these filters.</td></tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
 
-<script>
-// Filter the entity dropdown to match the chosen entity kind.
-(function () {
-  const kindSel = document.getElementById("entity-kind");
-  const entitySel = document.getElementById("entity-id");
-  if (!kindSel || !entitySel) return;
-  function syncEntities() {
-    const k = kindSel.value;
-    entitySel.querySelectorAll("optgroup").forEach(og => {
-      og.style.display = (og.dataset.kind === k) ? "" : "none";
-      og.disabled = og.dataset.kind !== k;
-    });
-    // Pick the first visible option to avoid submitting a hidden value.
-    const firstVisible = entitySel.querySelector(`optgroup[data-kind="${k}"] option`);
-    if (firstVisible) entitySel.value = firstVisible.value;
-  }
-  // Auto-fill currency from entity selection.
-  const currencyInput = document.querySelector('input[name="currency"]');
-  function syncCurrency() {
-    const opt = entitySel.options[entitySel.selectedIndex];
-    if (opt && opt.dataset.currency && currencyInput) currencyInput.value = opt.dataset.currency;
-  }
-  kindSel.addEventListener("change", () => { syncEntities(); syncCurrency(); });
-  entitySel.addEventListener("change", syncCurrency);
-  syncEntities();
-  syncCurrency();
-})();
-</script>
 {% endblock %}

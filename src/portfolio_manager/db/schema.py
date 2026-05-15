@@ -415,4 +415,14 @@ MIGRATIONS: list[tuple[int, str]] = [
         );
         """,
     ),
+    (
+        7,
+        """
+        -- ISIN code on assets. ISO 6166. 12 chars, alphanumeric.
+        -- Optional. Used together with ticker to uniquely identify a security
+        -- and verify it against an external lookup service.
+        ALTER TABLE assets ADD COLUMN IF NOT EXISTS isin VARCHAR;
+        CREATE INDEX IF NOT EXISTS idx_assets_isin ON assets(isin);
+        """,
+    ),
 ]

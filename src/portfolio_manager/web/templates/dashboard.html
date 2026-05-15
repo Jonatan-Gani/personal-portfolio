@@ -83,6 +83,115 @@
   </div>
 </div>
 
+<!-- ============================================================== Markets -->
+<div class="card section" id="markets-card" style="margin-top:1rem">
+  <div class="card-header">
+    <h3>Markets</h3>
+    <div class="actions">
+      <span class="muted" style="font-size:11px" id="markets-meta"></span>
+      <button class="btn btn-sm" id="markets-refresh" type="button">↻ Refresh</button>
+    </div>
+  </div>
+  <div class="card-body" style="padding:.5rem">
+    <div id="markets-grid" class="markets-grid">
+      <div class="muted" style="padding:1rem;font-size:13px">Loading markets…</div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .markets-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: .5rem;
+  }
+  .market-cell {
+    padding: .55rem .75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    gap: .15rem;
+  }
+  .market-cell .mkt-lbl { font-size: 11px; color: var(--text-mute); font-weight: 500; }
+  .market-cell .mkt-px  { font-family: var(--mono); font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .market-cell .mkt-chg { font-family: var(--mono); font-size: 11px; }
+  .market-cell .mkt-chg.up   { color: var(--pos); }
+  .market-cell .mkt-chg.down { color: var(--neg); }
+  .market-cell .mkt-err { font-size: 11px; color: var(--text-faint); font-style: italic; }
+</style>
+
+<script>
+(function () {
+  const grid = document.getElementById("markets-grid");
+  const meta = document.getElementById("markets-meta");
+  const refresh = document.getElementById("markets-refresh");
+
+  function fmtPrice(p, ccy) {
+    if (p == null) return "—";
+    const opts = { maximumFractionDigits: p >= 100 ? 2 : 4 };
+    return p.toLocaleString(undefined, opts);
+  }
+  function fmtPct(x) {
+    if (x == null) return "—";
+    const s = (x * 100).toFixed(2);
+    return (x > 0 ? "+" : "") + s + "%";
+  }
+  function render(quotes) {
+    grid.innerHTML = "";
+    if (!quotes || !quotes.length) {
+      grid.innerHTML = '<div class="muted" style="padding:1rem;font-size:13px">No watchlist configured.</div>';
+      return;
+    }
+    for (const q of quotes) {
+      const cell = document.createElement("div");
+      cell.className = "market-cell";
+      const lbl = document.createElement("div");
+      lbl.className = "mkt-lbl";
+      lbl.innerHTML = `${q.label || q.symbol}<span class="faint" style="font-weight:400">${q.symbol && q.label && q.symbol !== q.label ? " · " + q.symbol : ""}</span>`;
+      cell.appendChild(lbl);
+      if (q.price != null) {
+        const px = document.createElement("div");
+        px.className = "mkt-px";
+        px.textContent = fmtPrice(q.price, q.currency) + (q.currency ? " " : "") + (q.currency || "");
+        cell.appendChild(px);
+        const chg = document.createElement("div");
+        const dir = q.change_pct == null ? "" : (q.change_pct >= 0 ? "up" : "down");
+        chg.className = "mkt-chg " + dir;
+        chg.textContent = q.change_abs != null
+          ? `${q.change_abs > 0 ? "+" : ""}${fmtPrice(q.change_abs)} (${fmtPct(q.change_pct)})`
+          : "no change data";
+        cell.appendChild(chg);
+      } else {
+        const e = document.createElement("div");
+        e.className = "mkt-err";
+        e.textContent = q.error || "unavailable";
+        cell.appendChild(e);
+      }
+      grid.appendChild(cell);
+    }
+  }
+  async function load() {
+    refresh.disabled = true;
+    meta.textContent = "fetching…";
+    try {
+      const r = await fetch("/api/markets/watchlist");
+      const j = await r.json();
+      render(j.quotes);
+      meta.textContent = new Date().toLocaleTimeString();
+    } catch (e) {
+      meta.textContent = "error";
+      grid.innerHTML = '<div class="muted" style="padding:1rem;font-size:13px;color:var(--neg)">Failed to load: ' + e.message + '</div>';
+    } finally {
+      refresh.disabled = false;
+    }
+  }
+  refresh.addEventListener("click", load);
+  load();
+})();
+</script>
+
 <div class="grid-2col">
   <div class="chart-card">
     <div class="chart-head">

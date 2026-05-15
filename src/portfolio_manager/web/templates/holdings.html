@@ -57,8 +57,13 @@
     <summary>+ Add investment</summary>
     <div class="drawer-body">
       <form method="post" action="/assets" class="field-row">
+        <div class="lookup-row" data-form="add-investment">
+          <label class="field">Ticker <input name="symbol" list="symbol-list" placeholder="e.g. VOO, AAPL.L"></label>
+          <label class="field">ISIN <input name="isin" maxlength="12" placeholder="optional"></label>
+          <button type="button" class="btn lookup-btn">Look up &amp; auto-fill</button>
+          <span class="lookup-status muted" style="font-size:12px"></span>
+        </div>
         <label class="field">Name <input name="name" required></label>
-        <label class="field">Symbol <input name="symbol" list="symbol-list" placeholder="e.g. VOO"></label>
         <label class="field">Instrument
           <select name="instrument_type">
             {% for t in instrument_types %}<option value="{{ t }}">{{ t | humanize }}</option>{% endfor %}
@@ -211,6 +216,8 @@
   </section>
   {% endif %}
 {% endfor %}
+
+{% include "_asset_lookup_js.html" %}
 
 <style>
   .acct-dot { display:inline-block; width:10px; height:10px; border-radius:3px; }

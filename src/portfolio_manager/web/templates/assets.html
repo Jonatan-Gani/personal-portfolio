@@ -20,8 +20,13 @@
   <summary>Add asset</summary>
   <div class="drawer-body">
     <form method="post" action="/assets" class="field-row">
+      <div class="lookup-row" data-form="add-asset">
+        <label class="field">Ticker <input name="symbol" list="symbol-list" placeholder="e.g. VOO, AAPL.L"></label>
+        <label class="field">ISIN <input name="isin" maxlength="12" placeholder="e.g. US9229083632"></label>
+        <button type="button" class="btn lookup-btn" title="Verify the security against the lookup provider">Look up &amp; auto-fill</button>
+        <span class="lookup-status muted" style="font-size:12px"></span>
+      </div>
       <label class="field">Name <input name="name" required></label>
-      <label class="field">Symbol <input name="symbol" list="symbol-list" placeholder="e.g. VOO"></label>
       <label class="field">Instrument
         <select name="instrument_type">
           {% for t in instrument_types %}<option value="{{ t }}">{{ t | humanize }}</option>{% endfor %}
@@ -54,6 +59,8 @@
   </div>
 </details>
 
+{% include "_asset_lookup_js.html" %}
+
 <div class="card">
   <table class="data">
     <thead>
@@ -83,7 +90,10 @@
           <strong>{{ a.name }}</strong>
           <div class="meta faint">{{ acct.name if acct else 'Unassigned' }}{% if acct and acct.broker %} · {{ acct.broker }}{% endif %}</div>
         </td>
-        <td class="mono">{{ a.symbol or '—' }}</td>
+        <td class="mono">
+          {{ a.symbol or '—' }}
+          {% if a.isin %}<div class="meta mono faint" style="font-size:10px">{{ a.isin }}</div>{% endif %}
+        </td>
         <td>
           {{ a.instrument_type.value | humanize }}
           <div class="meta">{{ a.asset_class.value | humanize }}</div>
@@ -113,8 +123,13 @@
               <summary>Edit</summary>
               <div class="row-edit-body">
                 <form method="post" action="/assets/{{ a.asset_id }}/update" class="field-row">
+                  <div class="lookup-row" data-form="edit-asset">
+                    <label class="field">Ticker <input name="symbol" value="{{ a.symbol or '' }}" list="symbol-list"></label>
+                    <label class="field">ISIN <input name="isin" value="{{ a.isin or '' }}" maxlength="12"></label>
+                    <button type="button" class="btn lookup-btn">Verify</button>
+                    <span class="lookup-status muted" style="font-size:12px"></span>
+                  </div>
                   <label class="field">Name <input name="name" value="{{ a.name }}" required></label>
-                  <label class="field">Symbol <input name="symbol" value="{{ a.symbol or '' }}" list="symbol-list"></label>
                   <label class="field">Instrument
                     <select name="instrument_type">
                       {% for t in instrument_types %}<option value="{{ t }}" {% if t == a.instrument_type.value %}selected{% endif %}>{{ t | humanize }}</option>{% endfor %}

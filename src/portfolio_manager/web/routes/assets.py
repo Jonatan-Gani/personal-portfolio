@@ -1,13 +1,42 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Form, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from ...domain.enums import AssetClass, InstrumentType
 from ...domain.exceptions import NotFoundError
 from ...domain.models import Asset
+from ...services.asset_lookup import is_valid_isin_format
 
 router = APIRouter()
+
+
+@router.get("/api/asset-lookup")
+def asset_lookup(request: Request, symbol: str | None = None, isin: str | None = None):
+    """Verify a ticker/ISIN against the external lookup provider and return
+    enriched metadata. Always returns 200 — callers should branch on `ok`."""
+    c = request.app.state.container
+    result = c.asset_lookup.lookup(symbol=symbol, isin=isin)
+    return JSONResponse(result.to_dict())
+
+
+@router.get("/api/isin-check")
+def isin_check(isin: str):
+    """Cheap structural ISIN validity check (no network)."""
+    return {"isin": isin.strip().upper(), "valid": is_valid_isin_format(isin)}
+
+
+@router.get("/api/markets/watchlist")
+def markets_watchlist(request: Request):
+    """Current + prior-close prices for the dashboard market widget.
+    Uses the configured watchlist from app_settings if set, else built-in defaults."""
+    c = request.app.state.container
+    custom = c.app_settings_repo.get("ui.market_watchlist")
+    if isinstance(custom, list) and custom:
+        quotes = c.markets.watchlist(custom)
+    else:
+        quotes = c.markets.watchlist()
+    return {"quotes": [q.to_dict() for q in quotes]}
 
 
 @router.get("/assets")
@@ -39,6 +68,7 @@ def create_asset(
     request: Request,
     name: str = Form(...),
     symbol: str | None = Form(None),
+    isin: str | None = Form(None),
     instrument_type: str = Form(...),
     asset_class: str = Form(...),
     currency: str = Form(...),
@@ -50,9 +80,11 @@ def create_asset(
     tags: str | None = Form(None),
 ):
     c = request.app.state.container
+    isin_clean = (isin or "").strip().upper() or None
     asset = Asset(
         name=name,
-        symbol=symbol or None,
+        symbol=(symbol or "").strip().upper() or None,
+        isin=isin_clean,
         instrument_type=InstrumentType(instrument_type),
         asset_class=AssetClass(asset_class),
         currency=currency,
@@ -73,6 +105,7 @@ def update_asset(
     asset_id: str,
     name: str = Form(...),
     symbol: str | None = Form(None),
+    isin: str | None = Form(None),
     instrument_type: str = Form(...),
     asset_class: str = Form(...),
     currency: str = Form(...),
@@ -89,7 +122,8 @@ def update_asset(
     except NotFoundError as e:
         raise HTTPException(404, str(e)) from e
     existing.name = name
-    existing.symbol = symbol or None
+    existing.symbol = (symbol or "").strip().upper() or None
+    existing.isin = (isin or "").strip().upper() or None
     existing.instrument_type = InstrumentType(instrument_type)
     existing.asset_class = AssetClass(asset_class)
     existing.currency = currency

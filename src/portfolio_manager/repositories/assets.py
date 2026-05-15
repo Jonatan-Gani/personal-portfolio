@@ -15,11 +15,13 @@ class AssetRepository:
         self.db.execute(
             """
             INSERT INTO assets (
-                asset_id, symbol, name, instrument_type, asset_class, currency, country, sector,
-                price_provider, account_id, notes, tags, created_at, updated_at, is_active
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                asset_id, symbol, isin, name, instrument_type, asset_class, currency,
+                country, sector, price_provider, account_id, notes, tags,
+                created_at, updated_at, is_active
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT (asset_id) DO UPDATE SET
                 symbol = EXCLUDED.symbol,
+                isin = EXCLUDED.isin,
                 name = EXCLUDED.name,
                 instrument_type = EXCLUDED.instrument_type,
                 asset_class = EXCLUDED.asset_class,
@@ -34,7 +36,7 @@ class AssetRepository:
                 is_active = EXCLUDED.is_active
             """,
             [
-                asset.asset_id, asset.symbol, asset.name, asset.instrument_type.value,
+                asset.asset_id, asset.symbol, asset.isin, asset.name, asset.instrument_type.value,
                 asset.asset_class.value, asset.currency, asset.country, asset.sector,
                 asset.price_provider, asset.account_id, asset.notes, asset.tags,
                 asset.created_at, asset.updated_at, asset.is_active,
