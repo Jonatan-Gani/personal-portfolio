@@ -17,10 +17,11 @@ def list_cash(request: Request):
     c = request.app.state.container
     items = c.portfolio.list_cash(include_inactive=True)
     state = c.holdings.at()
+    accounts = c.accounts_repo.list_active()
     return request.app.state.templates.TemplateResponse(
         request,
         "cash.html",
-        {"request": request, "items": items, "balances": state.cash_balances},
+        {"request": request, "items": items, "balances": state.cash_balances, "accounts": accounts},
     )
 
 
@@ -31,6 +32,7 @@ def create_cash(
     currency: str = Form(...),
     opening_balance: float | None = Form(None),
     country: str | None = Form(None),
+    account_id: str | None = Form(None),
     notes: str | None = Form(None),
     tags: str | None = Form(None),
 ):
@@ -39,6 +41,7 @@ def create_cash(
         account_name=account_name,
         currency=currency,
         country=country or None,
+        account_id=account_id or None,
         notes=notes,
         tags=[t.strip() for t in (tags or "").split(",") if t.strip()],
     )
@@ -65,6 +68,7 @@ def update_cash(
     account_name: str = Form(...),
     currency: str = Form(...),
     country: str | None = Form(None),
+    account_id: str | None = Form(None),
     notes: str | None = Form(None),
     tags: str | None = Form(None),
 ):
@@ -76,6 +80,7 @@ def update_cash(
     existing.account_name = account_name
     existing.currency = currency
     existing.country = country or None
+    existing.account_id = account_id or None
     existing.notes = notes
     existing.tags = [t.strip() for t in (tags or "").split(",") if t.strip()]
     c.portfolio.update_cash(existing)

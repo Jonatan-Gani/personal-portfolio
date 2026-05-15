@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_account_select.html" import account_select %}
 {% block title %}Assets{% endblock %}
 {% block content %}
 
@@ -41,6 +42,7 @@
           <option value="mock">mock</option>
         </select>
       </label>
+      {{ account_select(accounts) }}
       <label class="field">Tags <input name="tags" placeholder="comma, separated"></label>
       <label class="field span-2">Notes <input name="notes"></label>
       <button class="btn btn-primary span-4" style="justify-self:start">Add asset</button>
@@ -70,11 +72,17 @@
       </tr>
     </thead>
     <tbody>
+      {% set accounts_by_id = {} %}
+      {% for acc in accounts %}{% set _ = accounts_by_id.update({acc.account_id: acc}) %}{% endfor %}
       {% for a in items %}
       {% set qty = quantities.get(a.asset_id, 0) %}
       {% set ovs = overrides.get(a.asset_id, []) %}
+      {% set acct = accounts_by_id.get(a.account_id) if a.account_id else None %}
       <tr class="{{ 'inactive' if not a.is_active }}">
-        <td><strong>{{ a.name }}</strong></td>
+        <td>
+          <strong>{{ a.name }}</strong>
+          <div class="meta faint">{{ acct.name if acct else 'Unassigned' }}{% if acct and acct.broker %} · {{ acct.broker }}{% endif %}</div>
+        </td>
         <td class="mono">{{ a.symbol or '—' }}</td>
         <td>
           {{ a.instrument_type.value | humanize }}
@@ -127,6 +135,7 @@
                       <option value="mock" {% if a.price_provider == 'mock' %}selected{% endif %}>mock</option>
                     </select>
                   </label>
+                  {{ account_select(accounts, current=a.account_id) }}
                   <label class="field">Tags <input name="tags" value="{{ a.tags|join(', ') }}"></label>
                   <label class="field span-2">Notes <input name="notes" value="{{ a.notes or '' }}"></label>
                   <div class="span-4 row-actions">

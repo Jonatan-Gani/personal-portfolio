@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_account_select.html" import account_select %}
 {% block title %}Liabilities{% endblock %}
 {% block content %}
 
@@ -43,6 +44,7 @@
         <input name="interest_rate_pct" type="number" step="any" placeholder="e.g. 4.5">
         <span class="hint">Annual percentage rate — accrues daily on each snapshot.</span>
       </label>
+      {{ account_select(accounts) }}
       <label class="field">Tags <input name="tags" placeholder="comma, separated"></label>
       <label class="field span-2">Notes <input name="notes"></label>
       <button class="btn btn-primary span-4" style="justify-self:start">Add liability</button>
@@ -65,9 +67,15 @@
       </tr>
     </thead>
     <tbody>
+      {% set accounts_by_id = {} %}
+      {% for acc in accounts %}{% set _ = accounts_by_id.update({acc.account_id: acc}) %}{% endfor %}
       {% for l in items %}
+      {% set acct = accounts_by_id.get(l.account_id) if l.account_id else None %}
       <tr class="{{ 'inactive' if not l.is_active }}">
-        <td><strong>{{ l.name }}</strong></td>
+        <td>
+          <strong>{{ l.name }}</strong>
+          <div class="meta faint">{{ acct.name if acct else 'Unassigned' }}{% if acct and acct.broker %} · {{ acct.broker }}{% endif %}</div>
+        </td>
         <td>{{ l.liability_type.value | humanize }}</td>
         <td class="mono">{{ l.currency }}</td>
         <td class="num">
@@ -98,6 +106,7 @@
                     <input name="interest_rate_pct" type="number" step="any"
                            value="{{ '%.4f' % (l.interest_rate * 100) if l.interest_rate is not none else '' }}">
                   </label>
+                  {{ account_select(accounts, current=l.account_id) }}
                   <label class="field">Tags <input name="tags" value="{{ l.tags|join(', ') }}"></label>
                   <label class="field span-2">Notes <input name="notes" value="{{ l.notes or '' }}"></label>
                   <div class="span-4 row-actions">

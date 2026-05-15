@@ -1,0 +1,13 @@
+{% macro account_select(accounts, current=None, name='account_id') %}
+<label class="field">Account
+  <select name="{{ name }}">
+    <option value="" {% if not current %}selected{% endif %}>— Unassigned —</option>
+    {% for a in accounts %}
+      <option value="{{ a.account_id }}" {% if current and current == a.account_id %}selected{% endif %}>
+        {{ a.name }}{% if a.broker %} · {{ a.broker }}{% endif %}
+      </option>
+    {% endfor %}
+  </select>
+  <span class="hint">Optional. Holdings without an account stay "Unassigned" and still roll up to portfolio totals.</span>
+</label>
+{% endmacro %}

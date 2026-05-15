@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_account_select.html" import account_select %}
 {% block title %}Cash{% endblock %}
 {% block content %}
 
@@ -23,8 +24,9 @@
       <label class="field">Country <input name="country" maxlength="2" list="country-list"></label>
       <label class="field">Opening balance
         <input name="opening_balance" type="number" step="any" placeholder="0">
-        <span class="hint">creates an OPENING_BALANCE transaction</span>
+        <span class="hint">Creates an "Opening balance" transaction. Leave blank to skip.</span>
       </label>
+      {{ account_select(accounts) }}
       <label class="field">Tags <input name="tags" placeholder="comma, separated"></label>
       <label class="field span-2">Notes <input name="notes"></label>
       <button class="btn btn-primary span-4" style="justify-self:start">Add account</button>
@@ -46,10 +48,16 @@
       </tr>
     </thead>
     <tbody>
+      {% set accounts_by_id = {} %}
+      {% for acc in accounts %}{% set _ = accounts_by_id.update({acc.account_id: acc}) %}{% endfor %}
       {% for c in items %}
       {% set bal = balances.get(c.cash_id, 0) %}
+      {% set acct = accounts_by_id.get(c.account_id) if c.account_id else None %}
       <tr class="{{ 'inactive' if not c.is_active }}">
-        <td><strong>{{ c.account_name }}</strong></td>
+        <td>
+          <strong>{{ c.account_name }}</strong>
+          <div class="meta faint">{{ acct.name if acct else 'Unassigned' }}{% if acct and acct.broker %} · {{ acct.broker }}{% endif %}</div>
+        </td>
         <td class="mono">{{ c.currency }}</td>
         <td class="num">
           <strong>{{ "{:,.2f}".format(bal) }}</strong>
@@ -71,6 +79,7 @@
                   <label class="field">Account <input name="account_name" value="{{ c.account_name }}" required></label>
                   <label class="field">Ccy <input name="currency" value="{{ c.currency }}" list="ccy-list" required></label>
                   <label class="field">Country <input name="country" value="{{ c.country or '' }}" list="country-list"></label>
+                  {{ account_select(accounts, current=c.account_id) }}
                   <label class="field">Tags <input name="tags" value="{{ c.tags|join(', ') }}"></label>
                   <label class="field span-2">Notes <input name="notes" value="{{ c.notes or '' }}"></label>
                   <div class="span-4 row-actions">

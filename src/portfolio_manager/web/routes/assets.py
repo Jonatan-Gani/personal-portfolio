@@ -18,6 +18,7 @@ def list_assets(request: Request):
     overrides = {
         a.asset_id: c.manual_prices_repo.list_for_asset(a.asset_id) for a in items
     }
+    accounts = c.accounts_repo.list_active()
     return request.app.state.templates.TemplateResponse(
         request,
         "assets.html",
@@ -28,6 +29,7 @@ def list_assets(request: Request):
             "overrides": overrides,
             "instrument_types": [t.value for t in InstrumentType],
             "asset_classes": [t.value for t in AssetClass],
+            "accounts": accounts,
         },
     )
 
@@ -43,6 +45,7 @@ def create_asset(
     country: str | None = Form(None),
     sector: str | None = Form(None),
     price_provider: str | None = Form(None),
+    account_id: str | None = Form(None),
     notes: str | None = Form(None),
     tags: str | None = Form(None),
 ):
@@ -56,6 +59,7 @@ def create_asset(
         country=country or None,
         sector=sector or None,
         price_provider=price_provider or None,
+        account_id=account_id or None,
         notes=notes,
         tags=[t.strip() for t in (tags or "").split(",") if t.strip()],
     )
@@ -75,6 +79,7 @@ def update_asset(
     country: str | None = Form(None),
     sector: str | None = Form(None),
     price_provider: str | None = Form(None),
+    account_id: str | None = Form(None),
     notes: str | None = Form(None),
     tags: str | None = Form(None),
 ):
@@ -91,6 +96,7 @@ def update_asset(
     existing.country = country or None
     existing.sector = sector or None
     existing.price_provider = price_provider or None
+    existing.account_id = account_id or None
     existing.notes = notes
     existing.tags = [t.strip() for t in (tags or "").split(",") if t.strip()]
     c.portfolio.update_asset(existing)

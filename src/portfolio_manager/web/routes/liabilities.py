@@ -40,6 +40,7 @@ def list_liabilities(request: Request):
         )
         if row:
             debts_total = float(row[0] or 0)
+    accounts = c.accounts_repo.list_active()
     return request.app.state.templates.TemplateResponse(
         request,
         "liabilities.html",
@@ -49,6 +50,7 @@ def list_liabilities(request: Request):
             "principals": principals,
             "liability_types": [t.value for t in LiabilityType],
             "debts_total": debts_total,
+            "accounts": accounts,
         },
     )
 
@@ -62,6 +64,7 @@ def create_liability(
     opening_balance: float = Form(...),
     interest_rate: float | None = Form(None),
     interest_rate_pct: float | None = Form(None),
+    account_id: str | None = Form(None),
     notes: str | None = Form(None),
     tags: str | None = Form(None),
 ):
@@ -74,6 +77,7 @@ def create_liability(
         liability_type=LiabilityType(liability_type),
         currency=currency,
         interest_rate=interest_rate,
+        account_id=account_id or None,
         notes=notes,
         tags=[t.strip() for t in (tags or "").split(",") if t.strip()],
     )
@@ -100,6 +104,7 @@ def update_liability(
     currency: str = Form(...),
     interest_rate: float | None = Form(None),
     interest_rate_pct: float | None = Form(None),
+    account_id: str | None = Form(None),
     notes: str | None = Form(None),
     tags: str | None = Form(None),
 ):
@@ -114,6 +119,7 @@ def update_liability(
     existing.liability_type = LiabilityType(liability_type)
     existing.currency = currency
     existing.interest_rate = interest_rate
+    existing.account_id = account_id or None
     existing.notes = notes
     existing.tags = [t.strip() for t in (tags or "").split(",") if t.strip()]
     c.portfolio.update_liability(existing)

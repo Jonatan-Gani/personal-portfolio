@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Compare{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div class="titles">
+    <span class="eyebrow">Side-by-side</span>
+    <h1>Compare</h1>
+  </div>
+  <p class="lede">Pick up to four scopes — the whole portfolio, a group, a specific account, or unassigned —
+    to see them side-by-side at the latest snapshot. All values are in {{ base_currency }}.</p>
+</div>
+
+<form method="get" class="toolbar">
+  {% for i in range(4) %}
+  <label class="field">Scope {{ i + 1 }}
+    <select name="scope">
+      <option value="" {% if not scope[i] is defined %}selected{% endif %}>— none —</option>
+      <option value="all"        {% if scope and scope[i] is defined and scope[i] == 'all' %}selected{% endif %}>All holdings</option>
+      <option value="unassigned" {% if scope and scope[i] is defined and scope[i] == 'unassigned' %}selected{% endif %}>Unassigned</option>
+      <optgroup label="Groups">
+        {% for g in groups %}
+          <option value="group:{{ g.group_id }}" {% if scope and scope[i] is defined and scope[i] == 'group:' ~ g.group_id %}selected{% endif %}>{{ g.name }}</option>
+        {% endfor %}
+      </optgroup>
+      <optgroup label="Accounts">
+        {% for a in accounts %}
+          <option value="account:{{ a.account_id }}" {% if scope and scope[i] is defined and scope[i] == 'account:' ~ a.account_id %}selected{% endif %}>{{ a.name }}{% if a.broker %} · {{ a.broker }}{% endif %}</option>
+        {% endfor %}
+      </optgroup>
+    </select>
+  </label>
+  {% endfor %}
+  <button class="btn btn-primary">Compare</button>
+  {% if panels %}<a class="btn btn-ghost" href="/compare">clear</a>{% endif %}
+</form>
+
+{% if not panels %}
+  <div class="empty">
+    <h2>Pick scopes above</h2>
+    <p>Choose 2–4 scopes and hit <em>Compare</em>. If you have no accounts defined yet, head to
+      <a href="/accounts">Accounts</a> to add some.</p>
+  </div>
+{% else %}
+  <div class="compare-grid" style="grid-template-columns: repeat({{ panels | length }}, minmax(0, 1fr))">
+    {% for p in panels %}
+    <div class="card">
+      <div class="card-header"><h3>{{ p.label }}</h3></div>
+      <div class="card-body">
+        <div class="kpi" style="border:none;padding:0;margin-bottom:1rem">
+          <div class="lbl">Net value</div>
+          <div class="val lg">{{ "{:,.0f}".format(p.net_value) }}</div>
+          <div class="sub">{{ base_currency }}</div>
+        </div>
+
+        <table class="mini-ledger" style="margin-bottom:1rem">
+          <tbody>
+            <tr><td class="label">Assets</td><td class="num">{{ "{:,.0f}".format(p.assets) }}</td></tr>
+            <tr><td class="label">Cash</td><td class="num">{{ "{:,.0f}".format(p.cash) }}</td></tr>
+            <tr><td class="label">Liabilities</td><td class="num text-neg">−{{ "{:,.0f}".format(p.liabilities) }}</td></tr>
+          </tbody>
+        </table>
+
+        <h4 style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-mute);margin:0 0 .4rem">By class</h4>
+        {% if p.by_class %}
+        {% set total = p.assets + p.cash %}
+        <table class="mini-ledger">
+          <tbody>
+            {% for cls, val in p.by_class %}
+            <tr>
+              <td class="label">{{ cls | humanize }}</td>
+              <td class="num">{{ "{:,.0f}".format(val) }}</td>
+              <td class="share">{{ "{:.1f}%".format(100 * val / total) if total else '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="muted" style="font-size:12px">No assets/cash in scope.</p>
+        {% endif %}
+
+        <h4 style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-mute);margin:1rem 0 .4rem">Top positions</h4>
+        {% if p.top %}
+        <table class="mini-ledger">
+          <tbody>
+            {% for name, kind, val in p.top %}
+            <tr>
+              <td class="label">{{ name }} <span class="pill kind-{{ kind }}">{{ kind }}</span></td>
+              <td class="num {{ 'text-neg' if kind == 'liability' else '' }}">{{ "{:+,.0f}".format(val) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="muted" style="font-size:12px">No positions in scope.</p>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
+<style>
+  .compare-grid {
+    display: grid;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+  }
+  @media (max-width: 1100px) {
+    .compare-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  }
+  @media (max-width: 640px) {
+    .compare-grid { grid-template-columns: 1fr !important; }
+  }
+</style>
+
+{% endblock %}

@@ -90,9 +90,9 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
     from .routes import (
-        api, assets, benchmarks, cash, exposures, exports, holdings, imports as imports_route,
-        income, liabilities, manual_prices, pages, returns_route, settings, snapshots,
-        snapshot_diff, targets, transactions,
+        accounts, api, assets, benchmarks, cash, compare, exposures, exports, holdings,
+        imports as imports_route, income, liabilities, manual_prices, pages, returns_route,
+        settings, snapshots, snapshot_diff, targets, transactions,
     )
     app.include_router(pages.router)
     app.include_router(holdings.router)
@@ -111,6 +111,8 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app.include_router(targets.router)
     app.include_router(income.router)
     app.include_router(imports_route.router)
+    app.include_router(accounts.router)
+    app.include_router(compare.router)
     app.include_router(settings.router)
     app.include_router(exports.router)
     app.include_router(api.router)
