@@ -20,6 +20,21 @@ providers:
     options:
       timeout_seconds: 15
       cache_ttl_hours: 12
+    # To price assets from a running Interactive Brokers TWS / IB Gateway
+    # instead, install the extra (pip install -e ".[ibkr]"), enable the API
+    # in TWS, and use:
+    #
+    # name: ibkr
+    # options:
+    #   host: 127.0.0.1
+    #   port: 7497            # 7497 TWS paper · 7496 TWS live · 4002/4001 Gateway
+    #   client_id: 17
+    #   timeout_seconds: 15
+    #   exchange: SMART       # default routing exchange
+    #   currency: USD         # default instrument currency
+    #   market_data_type: 3   # 1 live · 2 frozen · 3 delayed · 4 delayed-frozen
+    #
+    # Symbols may be "TICKER" or "TICKER:EXCHANGE:CURRENCY" (e.g. VOD:LSE:GBP).
 
 web:
   host: 127.0.0.1

@@ -122,6 +122,31 @@ providers:
 To add a provider, implement `providers/base.py` ABC and register it in `providers/registry.py`. No other code
 changes.
 
+#### Interactive Brokers prices
+
+`ibkr` is a `PriceProvider` backed by a running TWS or IB Gateway (via `ib_insync`). It needs the extra
+dependency and a gateway with the socket API enabled:
+
+```bash
+pip install -e ".[ibkr]"
+```
+
+```yaml
+providers:
+  price:
+    name: ibkr
+    options:
+      host: 127.0.0.1
+      port: 7497          # 7497 TWS paper · 7496 TWS live · 4002/4001 Gateway
+      client_id: 17
+      exchange: SMART     # default routing exchange
+      currency: USD       # default instrument currency
+      market_data_type: 3 # 1 live · 2 frozen · 3 delayed · 4 delayed-frozen
+```
+
+Asset symbols are bare tickers (`AAPL`) or `TICKER:EXCHANGE:CURRENCY` (`VOD:LSE:GBP`) for non-US instruments.
+`market_data_type: 3` (delayed) works without a paid market-data subscription.
+
 ### Snapshots
 
 Every snapshot stores, per position, the value in every reporting currency at the FX rates observed at that
