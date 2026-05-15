@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Import transactions{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div class="titles">
+    <span class="eyebrow">Bulk entry</span>
+    <h1>Import transactions</h1>
+  </div>
+  <p class="lede">Upload a CSV from your broker or bank, map the columns, preview the parsed rows,
+    then commit. Required: <span class="mono">date · type · entity_kind · entity_id · amount · currency</span>.</p>
+</div>
+
+<details class="drawer" open>
+  <summary>1 · Upload &amp; map columns</summary>
+  <div class="drawer-body">
+    <form method="post" action="/import/preview" enctype="multipart/form-data">
+      <div class="field-row">
+        <label class="field span-2">CSV file
+          <input type="file" name="file" accept=".csv,text/csv" required>
+        </label>
+        <label class="field">
+          <span>Has header row?</span>
+          <select name="has_header">
+            <option value="on" {% if has_header %}selected{% endif %}>Yes</option>
+            <option value="off" {% if has_header == False %}selected{% endif %}>No</option>
+          </select>
+        </label>
+      </div>
+
+      <div style="margin-top:1rem">
+        <label class="field">Column mapping (JSON)
+          <textarea name="column_map" rows="4" class="mono" style="width:100%;font-size:12px;padding:.5rem;border:1px solid var(--border);border-radius:var(--radius-sm)">{{ column_map or '{"Date":"date","Type":"type","Kind":"entity_kind","ID":"entity_id","Amount":"amount","Currency":"currency","Quantity":"quantity","Price":"price","Fees":"fees","Notes":"notes"}' }}</textarea>
+          <span class="hint">Map your CSV column names → target fields. Targets: {{ fields|join(', ') if fields else 'date, type, entity_kind, entity_id, amount, currency, quantity, price, fees, notes' }}</span>
+        </label>
+      </div>
+
+      <div style="margin-top:1rem">
+        <button class="btn btn-primary">Parse &amp; preview</button>
+      </div>
+    </form>
+
+    <details class="section" style="margin-top:1.5rem">
+      <summary class="muted" style="font-size:13px;cursor:pointer">Reference: entity IDs in this portfolio</summary>
+      <div class="grid-3col" style="margin-top:.75rem">
+        <div class="card">
+          <div class="card-header"><h3>Assets</h3></div>
+          <table class="data compact">
+            <thead><tr><th>Name</th><th class="mono">asset_id</th></tr></thead>
+            <tbody>
+              {% for a in assets %}<tr><td>{{ a.name }}</td><td class="mono" style="font-size:11px">{{ a.asset_id }}</td></tr>{% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>Cash</h3></div>
+          <table class="data compact">
+            <thead><tr><th>Account</th><th class="mono">cash_id</th></tr></thead>
+            <tbody>
+              {% for c in cash_accounts %}<tr><td>{{ c.account_name }}</td><td class="mono" style="font-size:11px">{{ c.cash_id }}</td></tr>{% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>Liabilities</h3></div>
+          <table class="data compact">
+            <thead><tr><th>Name</th><th class="mono">liability_id</th></tr></thead>
+            <tbody>
+              {% for l in liabilities %}<tr><td>{{ l.name }}</td><td class="mono" style="font-size:11px">{{ l.liability_id }}</td></tr>{% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </details>
+  </div>
+</details>
+
+{% if preview is not none %}
+<div class="card section">
+  <div class="card-header">
+    <h3>2 · Preview</h3>
+    <div class="actions">
+      <span class="muted mono" style="font-size:12px">{{ preview | length }} valid · {{ errors | length }} error{{ '' if errors|length == 1 else 's' }}</span>
+    </div>
+  </div>
+  {% if errors %}
+  <div style="background:var(--neg-bg);border-bottom:1px solid var(--border);padding:.75rem 1.25rem;color:var(--neg);font-size:12.5px">
+    <strong>Errors:</strong>
+    <ul style="margin:.4rem 0 0 1.25rem">
+      {% for e in errors %}<li class="mono">{{ e }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  <table class="data compact">
+    <thead>
+      <tr>
+        <th>Date</th><th>Type</th><th>Kind</th><th>Entity</th>
+        <th class="num">Qty</th><th class="num">Price</th><th class="num">Amount</th>
+        <th>Ccy</th><th class="num">Fees</th><th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in preview[:200] %}
+      <tr>
+        <td class="mono">{{ p.transaction_date }}</td>
+        <td>{{ p.transaction_type }}</td>
+        <td>{{ p.entity_kind }}</td>
+        <td class="mono" style="font-size:11px">{{ p.entity_id[:16] }}</td>
+        <td class="num">{{ p.quantity if p.quantity is not none else '' }}</td>
+        <td class="num">{{ p.price if p.price is not none else '' }}</td>
+        <td class="num">{{ p.amount }}</td>
+        <td class="mono">{{ p.currency }}</td>
+        <td class="num">{{ p.fees }}</td>
+        <td class="muted" style="font-size:12px">{{ p.notes or '' }}</td>
+      </tr>
+      {% endfor %}
+      {% if preview | length > 200 %}
+      <tr><td colspan="10" class="muted" style="text-align:center">…and {{ preview|length - 200 }} more rows.</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+  {% if preview %}
+  <div style="padding:1rem 1.25rem;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:.5rem">
+    <form method="post" action="/import/commit">
+      <input type="hidden" name="payload" value='{{ preview_payload }}'>
+      <button class="btn btn-primary">3 · Commit {{ preview | length }} transaction{{ '' if preview|length == 1 else 's' }}</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}

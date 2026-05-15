@@ -1,0 +1,153 @@
+{# Shared HTML <datalist>s used by autocomplete inputs across the app.
+   Reference these from any form via list="ccy-list" / list="country-list" / list="symbol-list".
+#}
+
+<datalist id="ccy-list">
+  {# ECB-supported currencies (their daily reference rates) #}
+  <option value="EUR">Euro</option>
+  <option value="USD">US Dollar</option>
+  <option value="GBP">British Pound</option>
+  <option value="JPY">Japanese Yen</option>
+  <option value="CHF">Swiss Franc</option>
+  <option value="AUD">Australian Dollar</option>
+  <option value="CAD">Canadian Dollar</option>
+  <option value="NZD">New Zealand Dollar</option>
+  <option value="SEK">Swedish Krona</option>
+  <option value="NOK">Norwegian Krone</option>
+  <option value="DKK">Danish Krone</option>
+  <option value="ISK">Icelandic Króna</option>
+  <option value="ILS">Israeli Shekel</option>
+  <option value="CNY">Chinese Yuan</option>
+  <option value="HKD">Hong Kong Dollar</option>
+  <option value="SGD">Singapore Dollar</option>
+  <option value="KRW">South Korean Won</option>
+  <option value="INR">Indian Rupee</option>
+  <option value="IDR">Indonesian Rupiah</option>
+  <option value="MYR">Malaysian Ringgit</option>
+  <option value="PHP">Philippine Peso</option>
+  <option value="THB">Thai Baht</option>
+  <option value="TRY">Turkish Lira</option>
+  <option value="ZAR">South African Rand</option>
+  <option value="MXN">Mexican Peso</option>
+  <option value="BRL">Brazilian Real</option>
+  <option value="PLN">Polish Złoty</option>
+  <option value="CZK">Czech Koruna</option>
+  <option value="HUF">Hungarian Forint</option>
+  <option value="RON">Romanian Leu</option>
+  <option value="BGN">Bulgarian Lev</option>
+</datalist>
+
+<datalist id="country-list">
+  {# ISO 3166 alpha-2 — common subset; free text still allowed #}
+  <option value="US">United States</option>
+  <option value="GB">United Kingdom</option>
+  <option value="DE">Germany</option>
+  <option value="FR">France</option>
+  <option value="IT">Italy</option>
+  <option value="ES">Spain</option>
+  <option value="NL">Netherlands</option>
+  <option value="BE">Belgium</option>
+  <option value="IE">Ireland</option>
+  <option value="LU">Luxembourg</option>
+  <option value="CH">Switzerland</option>
+  <option value="AT">Austria</option>
+  <option value="DK">Denmark</option>
+  <option value="SE">Sweden</option>
+  <option value="NO">Norway</option>
+  <option value="FI">Finland</option>
+  <option value="IS">Iceland</option>
+  <option value="PT">Portugal</option>
+  <option value="GR">Greece</option>
+  <option value="PL">Poland</option>
+  <option value="CZ">Czechia</option>
+  <option value="HU">Hungary</option>
+  <option value="RO">Romania</option>
+  <option value="BG">Bulgaria</option>
+  <option value="HR">Croatia</option>
+  <option value="SI">Slovenia</option>
+  <option value="SK">Slovakia</option>
+  <option value="EE">Estonia</option>
+  <option value="LV">Latvia</option>
+  <option value="LT">Lithuania</option>
+  <option value="IL">Israel</option>
+  <option value="AE">UAE</option>
+  <option value="SA">Saudi Arabia</option>
+  <option value="TR">Türkiye</option>
+  <option value="JP">Japan</option>
+  <option value="CN">China</option>
+  <option value="HK">Hong Kong</option>
+  <option value="TW">Taiwan</option>
+  <option value="KR">South Korea</option>
+  <option value="SG">Singapore</option>
+  <option value="MY">Malaysia</option>
+  <option value="TH">Thailand</option>
+  <option value="ID">Indonesia</option>
+  <option value="PH">Philippines</option>
+  <option value="VN">Vietnam</option>
+  <option value="IN">India</option>
+  <option value="AU">Australia</option>
+  <option value="NZ">New Zealand</option>
+  <option value="CA">Canada</option>
+  <option value="MX">Mexico</option>
+  <option value="BR">Brazil</option>
+  <option value="AR">Argentina</option>
+  <option value="CL">Chile</option>
+  <option value="ZA">South Africa</option>
+  <option value="EG">Egypt</option>
+  <option value="NG">Nigeria</option>
+  <option value="KE">Kenya</option>
+</datalist>
+
+<datalist id="symbol-list">
+  {# Common tickers — this is suggestion only; any yfinance-resolvable symbol works. #}
+  <!-- broad-market ETFs -->
+  <option value="VOO">Vanguard S&amp;P 500</option>
+  <option value="VTI">Vanguard Total US Market</option>
+  <option value="VEA">Vanguard FTSE Developed ex-US</option>
+  <option value="VWO">Vanguard Emerging Markets</option>
+  <option value="VXUS">Vanguard Total International</option>
+  <option value="VWCE.DE">Vanguard FTSE All-World UCITS</option>
+  <option value="IWDA.AS">iShares Core MSCI World UCITS</option>
+  <option value="EIMI.L">iShares Core MSCI Emerging Markets</option>
+  <option value="QQQ">Invesco QQQ (Nasdaq-100)</option>
+  <!-- bonds -->
+  <option value="AGG">iShares Core US Aggregate Bond</option>
+  <option value="BND">Vanguard Total Bond Market</option>
+  <option value="IEF">iShares 7-10 Yr Treasury</option>
+  <option value="TLT">iShares 20+ Yr Treasury</option>
+  <!-- gold / commodities -->
+  <option value="GLD">SPDR Gold Shares</option>
+  <option value="IAU">iShares Gold Trust</option>
+  <!-- single names -->
+  <option value="AAPL">Apple</option>
+  <option value="MSFT">Microsoft</option>
+  <option value="GOOGL">Alphabet</option>
+  <option value="AMZN">Amazon</option>
+  <option value="META">Meta Platforms</option>
+  <option value="NVDA">NVIDIA</option>
+  <option value="TSLA">Tesla</option>
+  <option value="BRK-B">Berkshire Hathaway B</option>
+</datalist>
+
+<datalist id="benchmark-list">
+  {# Common index proxies (yfinance tickers) #}
+  <option value="^GSPC">S&amp;P 500</option>
+  <option value="^DJI">Dow Jones Industrial Average</option>
+  <option value="^IXIC">Nasdaq Composite</option>
+  <option value="^NDX">Nasdaq-100</option>
+  <option value="^RUT">Russell 2000</option>
+  <option value="^FTSE">FTSE 100</option>
+  <option value="^GDAXI">DAX (Germany)</option>
+  <option value="^FCHI">CAC 40 (France)</option>
+  <option value="^STOXX50E">Euro Stoxx 50</option>
+  <option value="^N225">Nikkei 225</option>
+  <option value="^HSI">Hang Seng</option>
+  <option value="000001.SS">Shanghai Composite</option>
+  <option value="^TA125.TA">Tel Aviv 125</option>
+  <option value="^OMXS30">OMX Stockholm 30</option>
+  <option value="^OMXC25">OMX Copenhagen 25</option>
+  <option value="^OBX">OBX (Norway)</option>
+  <option value="^AXJO">ASX 200</option>
+  <option value="^BVSP">Bovespa (Brazil)</option>
+  <option value="^BSESN">BSE Sensex (India)</option>
+</datalist>

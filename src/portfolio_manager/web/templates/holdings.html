@@ -1,0 +1,337 @@
+{% extends "base.html" %}
+{% block title %}Holdings{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div class="titles">
+    <span class="eyebrow">What you own</span>
+    <h1>Holdings</h1>
+  </div>
+  <p class="lede">Everything on the asset side of your balance sheet — investments and cash.
+    Quantities and balances are derived from the <a href="/transactions">transaction log</a>.</p>
+</div>
+
+<div class="kpi-grid" style="grid-template-columns: repeat(3, 1fr)">
+  <div class="kpi">
+    <div class="lbl">Total assets</div>
+    <div class="val">{{ "{:,.0f}".format(total_assets) }} <span class="faint" style="font-size:.6em">{{ base_currency }}</span></div>
+  </div>
+  <div class="kpi" style="border-left: 3px solid #2563EB">
+    <div class="lbl">Investments</div>
+    <div class="val">{{ "{:,.0f}".format(investments_total) }}</div>
+    <div class="sub">{{ assets | length }} position{{ '' if assets | length == 1 else 's' }}</div>
+  </div>
+  <div class="kpi" style="border-left: 3px solid #166534">
+    <div class="lbl">Cash</div>
+    <div class="val">{{ "{:,.0f}".format(cash_total) }}</div>
+    <div class="sub">{{ cash_accounts | length }} account{{ '' if cash_accounts | length == 1 else 's' }}</div>
+  </div>
+</div>
+
+<!-- ============================================================== INVESTMENTS -->
+<section class="holdings-section">
+  <div class="section-head">
+    <div>
+      <span class="section-marker" style="background:#2563EB"></span>
+      <h2>Investments</h2>
+      <span class="muted" style="font-size:12px">securities, real estate, alternatives</span>
+    </div>
+    <div class="row-actions">
+      <a class="btn btn-sm" href="/export/assets.csv">↓ CSV</a>
+    </div>
+  </div>
+
+  <details class="drawer">
+    <summary>Add investment</summary>
+    <div class="drawer-body">
+      <form method="post" action="/assets" class="field-row">
+        <label class="field">Name <input name="name" required></label>
+        <label class="field">Symbol <input name="symbol" list="symbol-list" placeholder="e.g. VOO"></label>
+        <label class="field">Instrument
+          <select name="instrument_type">
+            {% for t in instrument_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+          </select>
+        </label>
+        <label class="field">Asset class
+          <select name="asset_class">
+            {% for t in asset_classes %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+          </select>
+        </label>
+        <label class="field">Currency <input name="currency" required maxlength="3" list="ccy-list" placeholder="USD"></label>
+        <label class="field">Country <input name="country" maxlength="2" list="country-list" placeholder="US"></label>
+        <label class="field">Sector <input name="sector"></label>
+        <label class="field">Price provider
+          <select name="price_provider">
+            <option value="">use default</option>
+            <option value="yfinance">yfinance</option>
+            <option value="mock">mock</option>
+          </select>
+        </label>
+        <label class="field">Tags <input name="tags" placeholder="comma, separated"></label>
+        <label class="field span-3">Notes <input name="notes"></label>
+        <button class="btn btn-primary span-4" style="justify-self:start">Add investment</button>
+      </form>
+      <p class="muted" style="font-size:12px;margin-top:.85rem">
+        After adding, go to <a href="/transactions">Transactions</a> to record an opening balance or your first buy.
+      </p>
+    </div>
+  </details>
+
+  <div class="card">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Position</th>
+          <th>Symbol</th>
+          <th>Class</th>
+          <th>Ccy</th>
+          <th class="num">Quantity</th>
+          <th class="num">Avg cost</th>
+          <th class="num">Cost basis</th>
+          <th class="num">Realized</th>
+          <th>Manual price</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in assets %}
+        {% set qty = quantities.get(a.asset_id, 0) %}
+        {% set ovs = overrides.get(a.asset_id, []) %}
+        {% set cb = cost.get(a.asset_id) %}
+        <tr class="{{ 'inactive' if not a.is_active }}">
+          <td>
+            <strong>{{ a.name }}</strong>
+            <div class="meta faint">{{ a.instrument_type.value }}{% if a.country %} · {{ a.country }}{% endif %}</div>
+          </td>
+          <td class="mono">{{ a.symbol or '—' }}</td>
+          <td><span class="pill faint">{{ a.asset_class.value }}</span></td>
+          <td class="mono">{{ a.currency }}</td>
+          <td class="num">
+            <strong>{{ "{:,.4f}".format(qty) }}</strong>
+            <div class="meta"><a href="/transactions?entity_id={{ a.asset_id }}&kind=asset">history</a></div>
+          </td>
+          <td class="num">
+            {% if cb and cb.avg_cost is not none %}
+              {{ "{:,.4f}".format(cb.avg_cost) }}
+              {% if cb.incomplete_cost_basis %}<div class="meta faint" title="Some lots have no recorded price">incomplete</div>{% endif %}
+            {% else %}<span class="faint">—</span>{% endif %}
+          </td>
+          <td class="num">
+            {% if cb and cb.total_cost_basis %}{{ "{:,.0f}".format(cb.total_cost_basis) }}{% else %}<span class="faint">—</span>{% endif %}
+          </td>
+          <td class="num {{ 'text-pos' if cb and cb.realized_pnl > 0 else 'text-neg' if cb and cb.realized_pnl < 0 else '' }}">
+            {% if cb and cb.realized_pnl %}{{ "{:+,.0f}".format(cb.realized_pnl) }}{% else %}<span class="faint">—</span>{% endif %}
+          </td>
+          <td>
+            {% if ovs %}
+              <span class="mono">{{ "{:,.4f}".format(ovs[0].price) }} {{ ovs[0].currency }}</span>
+              <div class="meta">{{ ovs[0].observed_at.strftime("%Y-%m-%d") if ovs[0].observed_at.strftime else ovs[0].observed_at }}</div>
+            {% else %}<span class="faint">—</span>{% endif %}
+          </td>
+          <td>
+            {% if a.tags %}
+              <div class="tag-list">{% for t in a.tags %}<span class="tag">{{ t }}</span>{% endfor %}</div>
+            {% else %}<span class="faint">—</span>{% endif %}
+          </td>
+          <td><span class="pill {{ 'active' if a.is_active else 'inactive' }}">{{ 'active' if a.is_active else 'inactive' }}</span></td>
+          <td>
+            <div class="row-actions">
+              <details class="row-edit">
+                <summary>Edit</summary>
+                <div class="row-edit-body">
+                  <form method="post" action="/assets/{{ a.asset_id }}/update" class="field-row">
+                    <label class="field">Name <input name="name" value="{{ a.name }}" required></label>
+                    <label class="field">Symbol <input name="symbol" value="{{ a.symbol or '' }}" list="symbol-list"></label>
+                    <label class="field">Instrument
+                      <select name="instrument_type">
+                        {% for t in instrument_types %}<option value="{{ t }}" {% if t == a.instrument_type.value %}selected{% endif %}>{{ t }}</option>{% endfor %}
+                      </select>
+                    </label>
+                    <label class="field">Class
+                      <select name="asset_class">
+                        {% for t in asset_classes %}<option value="{{ t }}" {% if t == a.asset_class.value %}selected{% endif %}>{{ t }}</option>{% endfor %}
+                      </select>
+                    </label>
+                    <label class="field">Ccy <input name="currency" value="{{ a.currency }}" list="ccy-list" required></label>
+                    <label class="field">Country <input name="country" value="{{ a.country or '' }}" list="country-list"></label>
+                    <label class="field">Sector <input name="sector" value="{{ a.sector or '' }}"></label>
+                    <label class="field">Provider
+                      <select name="price_provider">
+                        <option value="" {% if not a.price_provider %}selected{% endif %}>default</option>
+                        <option value="yfinance" {% if a.price_provider == 'yfinance' %}selected{% endif %}>yfinance</option>
+                        <option value="mock" {% if a.price_provider == 'mock' %}selected{% endif %}>mock</option>
+                      </select>
+                    </label>
+                    <label class="field">Tags <input name="tags" value="{{ a.tags|join(', ') }}"></label>
+                    <label class="field span-2">Notes <input name="notes" value="{{ a.notes or '' }}"></label>
+                    <div class="span-4 row-actions">
+                      <button class="btn btn-primary">Save</button>
+                    </div>
+                  </form>
+
+                  <div style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
+                    <strong style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-mute)">Manual price overrides</strong>
+                    {% if ovs %}
+                    <table class="mini-ledger" style="margin-top:.5rem">
+                      <thead><tr><th>Observed</th><th class="num">Price</th><th>Ccy</th><th></th></tr></thead>
+                      <tbody>
+                        {% for o in ovs %}
+                        <tr>
+                          <td class="label">{{ o.observed_at.strftime("%Y-%m-%d") if o.observed_at.strftime else o.observed_at }}</td>
+                          <td class="num">{{ "{:,.4f}".format(o.price) }}</td>
+                          <td class="mono">{{ o.currency }}</td>
+                          <td class="right">
+                            <form method="post" action="/manual-prices/{{ o.override_id }}/delete" class="inline" onsubmit="return confirm('Delete this price observation?')">
+                              <input type="hidden" name="return_to" value="/holdings" />
+                              <button class="btn btn-sm btn-danger">Delete</button>
+                            </form>
+                          </td>
+                        </tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                    {% endif %}
+                    <form method="post" action="/manual-prices" class="field-row" style="margin-top:.75rem">
+                      <input type="hidden" name="asset_id" value="{{ a.asset_id }}" />
+                      <input type="hidden" name="return_to" value="/holdings" />
+                      <label class="field">Observed <input name="observed_at" type="date" required></label>
+                      <label class="field">Price <input name="price" type="number" step="any" required></label>
+                      <label class="field">Currency <input name="currency" list="ccy-list" value="{{ a.currency }}" maxlength="3" required></label>
+                      <label class="field">Notes <input name="notes" placeholder="optional"></label>
+                      <button class="btn span-4" style="justify-self:start">Add manual price</button>
+                    </form>
+                  </div>
+                </div>
+              </details>
+              {% if a.is_active %}
+                <form method="post" action="/assets/{{ a.asset_id }}/delete" class="inline"><button class="btn btn-sm btn-danger">Deactivate</button></form>
+              {% else %}
+                <form method="post" action="/assets/{{ a.asset_id }}/reactivate" class="inline"><button class="btn btn-sm">Reactivate</button></form>
+                <form method="post" action="/assets/{{ a.asset_id }}/delete?hard=true" class="inline"
+                      onsubmit="return confirm('Permanently delete?')">
+                  <button class="btn btn-sm btn-danger">Hard delete</button>
+                </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="11" class="table-empty">No investments yet — add one above.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============================================================== CASH -->
+<section class="holdings-section">
+  <div class="section-head">
+    <div>
+      <span class="section-marker" style="background:#166534"></span>
+      <h2>Cash</h2>
+      <span class="muted" style="font-size:12px">bank accounts and cash equivalents</span>
+    </div>
+    <div class="row-actions">
+      <a class="btn btn-sm" href="/export/cash.csv">↓ CSV</a>
+    </div>
+  </div>
+
+  <details class="drawer">
+    <summary>Add cash account</summary>
+    <div class="drawer-body">
+      <form method="post" action="/cash" class="field-row">
+        <label class="field">Account name <input name="account_name" required></label>
+        <label class="field">Currency <input name="currency" required maxlength="3" list="ccy-list" placeholder="USD"></label>
+        <label class="field">Country <input name="country" maxlength="2" list="country-list"></label>
+        <label class="field">Opening balance
+          <input name="opening_balance" type="number" step="any" placeholder="0">
+          <span class="hint">creates an OPENING_BALANCE transaction</span>
+        </label>
+        <label class="field">Tags <input name="tags" placeholder="comma, separated"></label>
+        <label class="field span-2">Notes <input name="notes"></label>
+        <button class="btn btn-primary span-4" style="justify-self:start">Add account</button>
+      </form>
+    </div>
+  </details>
+
+  <div class="card">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Account</th>
+          <th>Ccy</th>
+          <th class="num">Balance</th>
+          <th>Country</th>
+          <th>Tags</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in cash_accounts %}
+        {% set bal = balances.get(c.cash_id, 0) %}
+        <tr class="{{ 'inactive' if not c.is_active }}">
+          <td><strong>{{ c.account_name }}</strong></td>
+          <td class="mono">{{ c.currency }}</td>
+          <td class="num">
+            <strong>{{ "{:,.2f}".format(bal) }}</strong>
+            <div class="meta"><a href="/transactions?entity_id={{ c.cash_id }}&kind=cash">history</a></div>
+          </td>
+          <td class="mono faint">{{ c.country or '—' }}</td>
+          <td>
+            {% if c.tags %}
+              <div class="tag-list">{% for t in c.tags %}<span class="tag">{{ t }}</span>{% endfor %}</div>
+            {% else %}<span class="faint">—</span>{% endif %}
+          </td>
+          <td><span class="pill {{ 'active' if c.is_active else 'inactive' }}">{{ 'active' if c.is_active else 'inactive' }}</span></td>
+          <td>
+            <div class="row-actions">
+              <details class="row-edit">
+                <summary>Edit</summary>
+                <div class="row-edit-body">
+                  <form method="post" action="/cash/{{ c.cash_id }}/update" class="field-row">
+                    <label class="field">Account <input name="account_name" value="{{ c.account_name }}" required></label>
+                    <label class="field">Ccy <input name="currency" value="{{ c.currency }}" list="ccy-list" required></label>
+                    <label class="field">Country <input name="country" value="{{ c.country or '' }}" list="country-list"></label>
+                    <label class="field">Tags <input name="tags" value="{{ c.tags|join(', ') }}"></label>
+                    <label class="field span-2">Notes <input name="notes" value="{{ c.notes or '' }}"></label>
+                    <div class="span-4 row-actions">
+                      <button class="btn btn-primary">Save</button>
+                    </div>
+                  </form>
+                </div>
+              </details>
+              {% if c.is_active %}
+                <form method="post" action="/cash/{{ c.cash_id }}/delete" class="inline"><button class="btn btn-sm btn-danger">Deactivate</button></form>
+              {% else %}
+                <form method="post" action="/cash/{{ c.cash_id }}/delete?hard=true" class="inline"
+                      onsubmit="return confirm('Permanently delete?')"><button class="btn btn-sm btn-danger">Hard delete</button></form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="table-empty">No cash accounts yet — add one above.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<style>
+  .holdings-section { margin-top: 2rem; }
+  .section-head {
+    display: flex; align-items: end; justify-content: space-between;
+    gap: 1rem; padding-bottom: .75rem; margin-bottom: 1rem;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .section-head h2 {
+    display: inline; font-size: 1.05rem; margin-right: .6rem;
+  }
+  .section-marker {
+    display: inline-block; width: 10px; height: 10px;
+    border-radius: 2px; margin-right: .6rem; vertical-align: middle;
+  }
+</style>
+{% endblock %}

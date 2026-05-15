@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light" />
+  <title>{% block title %}Portfolio{% endblock %} · Portfolio</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" />
+
+  <link rel="stylesheet" href="/static/style.css" />
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+  <header class="topbar">
+    <a href="/" class="brand">
+      <span class="dot"></span>
+      Portfolio
+    </a>
+    <nav>
+      {% set p = (request.url.path if request else '/') %}
+      <a href="/"             class="{{ 'active' if p == '/' }}">Dashboard</a>
+      <a href="/holdings"     class="{{ 'active' if p.startswith('/holdings') or p.startswith('/assets') or p.startswith('/cash') }}">Holdings</a>
+      <a href="/liabilities"  class="{{ 'active' if p.startswith('/liabilities') }}">Debts</a>
+      <a href="/transactions" class="{{ 'active' if p.startswith('/transactions') or p.startswith('/import') }}">Transactions</a>
+      <a href="/returns"      class="{{ 'active' if p.startswith('/returns') }}">Performance</a>
+      <a href="/income"       class="{{ 'active' if p.startswith('/income') }}">Income</a>
+      <a href="/targets"      class="{{ 'active' if p.startswith('/targets') }}">Targets</a>
+      <a href="/exposures"    class="{{ 'active' if p.startswith('/exposures') }}">Exposures</a>
+    </nav>
+    <div class="topbar-meta">
+      <a href="/settings" style="border:none;color:var(--text-mute);font-size:12px">Settings</a>
+      <span class="faint">·</span>
+      base <span class="ccy">{{ base_currency }}</span>
+    </div>
+  </header>
+
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer>
+    portfolio-manager · v0.1
+  </footer>
+
+  {% include "_datalists.html" %}
+</body>
+</html>

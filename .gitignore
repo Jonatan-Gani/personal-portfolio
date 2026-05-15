@@ -1,0 +1,27 @@
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+.env
+.env.local
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+
+# Project data — DuckDB lives here. Never commit balances.
+data/
+!data/.gitkeep
+
+# Local config (currencies, provider tweaks). config.example.yaml is the template.
+config/config.yaml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code local session/settings
+.claude/

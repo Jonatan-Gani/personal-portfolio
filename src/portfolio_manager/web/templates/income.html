@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Income{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+  <div class="titles">
+    <span class="eyebrow">What it pays you</span>
+    <h1>Income</h1>
+  </div>
+  <p class="lede">Trailing 12 months of dividends and interest, in {{ ccy }}. Forward-annual is the
+    same number — a run-rate projection, not a forecast.</p>
+</div>
+
+<div class="kpi-grid">
+  <div class="kpi">
+    <div class="lbl">TTM income</div>
+    <div class="val lg">{{ "{:,.0f}".format(report.ttm_total_report) }} <span class="faint" style="font-size:0.6em">{{ ccy }}</span></div>
+  </div>
+  <div class="kpi">
+    <div class="lbl">Run-rate / yr</div>
+    <div class="val">{{ "{:,.0f}".format(report.forward_annual_report) }}</div>
+  </div>
+  <div class="kpi">
+    <div class="lbl">Portfolio yield</div>
+    <div class="val">{% if report.portfolio_yield is not none %}{{ "{:.2%}".format(report.portfolio_yield) }}{% else %}<span class="faint">—</span>{% endif %}</div>
+    <div class="sub">income ÷ assets+cash</div>
+  </div>
+  <div class="kpi">
+    <div class="lbl">Streams</div>
+    <div class="val">{{ report.rows | length }}</div>
+  </div>
+</div>
+
+{% if report.monthly_series %}
+<div class="chart-card section" style="margin-top:0">
+  <div class="chart-head">
+    <div>
+      <h2>Monthly income</h2>
+      <div class="sub">Dividends vs interest, last 12 months · {{ ccy }}</div>
+    </div>
+  </div>
+  <div class="chart-canvas tall"><canvas id="income-chart"></canvas></div>
+</div>
+{% endif %}
+
+<div class="card section">
+  <div class="card-header"><h3>By position</h3></div>
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Position</th>
+        <th>Native ccy</th>
+        <th class="num"># pays</th>
+        <th class="num">TTM (native)</th>
+        <th class="num">TTM ({{ ccy }})</th>
+        <th class="num">Yield-on-value</th>
+        <th class="num">Yield-on-cost</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in report.rows %}
+      <tr>
+        <td><strong>{{ r.name }}</strong> <span class="pill kind-{{ r.entity_kind }}">{{ r.entity_kind }}</span></td>
+        <td class="mono">{{ r.currency }}</td>
+        <td class="num">{{ r.payments }}</td>
+        <td class="num">{{ "{:,.2f}".format(r.ttm_total) }}</td>
+        <td class="num"><strong>{{ "{:,.2f}".format(r.ttm_in_report) }}</strong></td>
+        <td class="num">{% if r.yield_on_value is not none %}{{ "{:.2%}".format(r.yield_on_value) }}{% else %}<span class="faint">—</span>{% endif %}</td>
+        <td class="num">{% if r.yield_on_cost is not none %}{{ "{:.2%}".format(r.yield_on_cost) }}{% else %}<span class="faint">—</span>{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="table-empty">No dividend/interest transactions in the trailing 12 months.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if report.monthly_series %}
+<script>
+(function () {
+  const series = {{ report.monthly_series | tojson }};
+  Chart.defaults.font.family = "Inter, sans-serif";
+  Chart.defaults.color = "#6B6B65";
+  const ctx = document.getElementById("income-chart").getContext("2d");
+  new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: series.map(r => r.month),
+      datasets: [
+        { label: "Dividends", data: series.map(r => r.dividends), backgroundColor: "#1E40AF", stack: "income" },
+        { label: "Interest",  data: series.map(r => r.interest),  backgroundColor: "#0E7490", stack: "income" },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: "bottom", labels: { boxWidth: 10, boxHeight: 10, padding: 12 } },
+        tooltip: {
+          backgroundColor: "#0F0F0E", titleColor: "#FAFAF9", bodyColor: "#FAFAF9",
+          padding: 8, cornerRadius: 4,
+          callbacks: { label: ctx => `${ctx.dataset.label}: ${Intl.NumberFormat().format(Math.round(ctx.parsed.y))} {{ ccy }}` },
+        },
+      },
+      scales: {
+        x: { grid: { display: false }, stacked: true },
+        y: { grid: { color: "#EDEDEA" }, stacked: true, ticks: { callback: v => Intl.NumberFormat().format(v) } },
+      },
+    },
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

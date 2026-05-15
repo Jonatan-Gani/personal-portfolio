@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Cash{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div class="titles">
+    <span class="eyebrow">Liquidity</span>
+    <h1>Cash</h1>
+  </div>
+  <div style="display:flex;align-items:end;gap:1rem">
+    <p class="lede" style="margin-right:1rem">Bank accounts and cash equivalents. Balances are derived from
+      <a href="/transactions">deposits / withdrawals / dividends / fees</a>.</p>
+    <a class="btn btn-sm" href="/export/cash.csv">↓ CSV</a>
+  </div>
+</div>
+
+<details class="drawer">
+  <summary>Add cash account</summary>
+  <div class="drawer-body">
+    <form method="post" action="/cash" class="field-row">
+      <label class="field">Account name <input name="account_name" required></label>
+      <label class="field">Currency <input name="currency" required maxlength="3" list="ccy-list" placeholder="USD"></label>
+      <label class="field">Country <input name="country" maxlength="2" list="country-list"></label>
+      <label class="field">Opening balance
+        <input name="opening_balance" type="number" step="any" placeholder="0">
+        <span class="hint">creates an OPENING_BALANCE transaction</span>
+      </label>
+      <label class="field">Tags <input name="tags" placeholder="comma, separated"></label>
+      <label class="field span-2">Notes <input name="notes"></label>
+      <button class="btn btn-primary span-4" style="justify-self:start">Add account</button>
+    </form>
+  </div>
+</details>
+
+<div class="card">
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Account</th>
+        <th>Ccy</th>
+        <th class="num">Balance</th>
+        <th>Country</th>
+        <th>Tags</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in items %}
+      {% set bal = balances.get(c.cash_id, 0) %}
+      <tr class="{{ 'inactive' if not c.is_active }}">
+        <td><strong>{{ c.account_name }}</strong></td>
+        <td class="mono">{{ c.currency }}</td>
+        <td class="num">
+          <strong>{{ "{:,.2f}".format(bal) }}</strong>
+          <div class="meta"><a href="/transactions?entity_id={{ c.cash_id }}&kind=cash">history</a></div>
+        </td>
+        <td class="mono faint">{{ c.country or '—' }}</td>
+        <td>
+          {% if c.tags %}
+            <div class="tag-list">{% for t in c.tags %}<span class="tag">{{ t }}</span>{% endfor %}</div>
+          {% else %}<span class="faint">—</span>{% endif %}
+        </td>
+        <td><span class="pill {{ 'active' if c.is_active else 'inactive' }}">{{ 'active' if c.is_active else 'inactive' }}</span></td>
+        <td>
+          <div class="row-actions">
+            <details class="row-edit">
+              <summary>Edit</summary>
+              <div class="row-edit-body">
+                <form method="post" action="/cash/{{ c.cash_id }}/update" class="field-row">
+                  <label class="field">Account <input name="account_name" value="{{ c.account_name }}" required></label>
+                  <label class="field">Ccy <input name="currency" value="{{ c.currency }}" list="ccy-list" required></label>
+                  <label class="field">Country <input name="country" value="{{ c.country or '' }}" list="country-list"></label>
+                  <label class="field">Tags <input name="tags" value="{{ c.tags|join(', ') }}"></label>
+                  <label class="field span-2">Notes <input name="notes" value="{{ c.notes or '' }}"></label>
+                  <div class="span-4 row-actions">
+                    <button class="btn btn-primary">Save</button>
+                  </div>
+                </form>
+              </div>
+            </details>
+            {% if c.is_active %}
+              <form method="post" action="/cash/{{ c.cash_id }}/delete" class="inline"><button class="btn btn-sm btn-danger">Deactivate</button></form>
+            {% else %}
+              <form method="post" action="/cash/{{ c.cash_id }}/delete?hard=true" class="inline"
+                    onsubmit="return confirm('Permanently delete?')"><button class="btn btn-sm btn-danger">Hard delete</button></form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="table-empty">No cash accounts yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

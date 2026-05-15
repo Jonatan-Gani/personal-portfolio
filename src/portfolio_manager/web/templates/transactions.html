@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}Transactions{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div class="titles">
+    <span class="eyebrow">Journal</span>
+    <h1>Transactions</h1>
+  </div>
+  <div style="display:flex;align-items:end;gap:1rem">
+    <p class="lede" style="margin-right:1rem">The source of truth: every event that changes your holdings or balances. Asset quantities and
+    cash balances are derived by replaying this log up to the snapshot's timestamp.</p>
+    <a class="btn btn-sm" href="/import">↑ Import CSV</a>
+    <a class="btn btn-sm" href="/export/transactions.csv">↓ CSV</a>
+  </div>
+</div>
+
+<details class="drawer" {% if not items %}open{% endif %}>
+  <summary>Record transaction</summary>
+  <div class="drawer-body">
+    <form method="post" action="/transactions" class="field-row">
+      <label class="field">Date <input name="transaction_date" type="date" required value="{{ filters.since or '' }}"></label>
+      <label class="field">Type
+        <select name="transaction_type" required>
+          {% for t in transaction_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="field">Entity kind
+        <select name="entity_kind" required id="entity-kind">
+          <option value="asset">asset</option>
+          <option value="cash">cash</option>
+          <option value="liability">liability</option>
+        </select>
+      </label>
+      <label class="field">Entity
+        <select name="entity_id" required id="entity-id">
+          <optgroup label="Assets" data-kind="asset">
+            {% for a in assets %}<option value="{{ a.asset_id }}" data-kind="asset" data-currency="{{ a.currency }}">{{ a.name }} ({{ a.symbol or a.currency }})</option>{% endfor %}
+          </optgroup>
+          <optgroup label="Cash" data-kind="cash">
+            {% for c in cash_accounts %}<option value="{{ c.cash_id }}" data-kind="cash" data-currency="{{ c.currency }}">{{ c.account_name }} ({{ c.currency }})</option>{% endfor %}
+          </optgroup>
+          <optgroup label="Liabilities" data-kind="liability">
+            {% for l in liabilities %}<option value="{{ l.liability_id }}" data-kind="liability" data-currency="{{ l.currency }}">{{ l.name }} ({{ l.currency }})</option>{% endfor %}
+          </optgroup>
+        </select>
+      </label>
+      <label class="field">Quantity
+        <input name="quantity" type="number" step="any" placeholder="for buy/sell/split">
+        <span class="hint">shares or units (split: ratio, e.g. 2 for a 2-for-1)</span>
+      </label>
+      <label class="field">Unit price
+        <input name="price" type="number" step="any" placeholder="for buy/sell">
+      </label>
+      <label class="field">Amount
+        <input name="amount" type="number" step="any" placeholder="for cash flows">
+        <span class="hint">cash flow value (deposit, dividend, fee, opening balance for cash)</span>
+      </label>
+      <label class="field">Currency <input name="currency" required maxlength="3" list="ccy-list"></label>
+      <label class="field">Fees <input name="fees" type="number" step="any" value="0"></label>
+      <label class="field span-2">Notes <input name="notes"></label>
+      <button class="btn btn-primary span-4" style="justify-self:start">Save transaction</button>
+    </form>
+    <p class="muted" style="font-size:12px;margin-top:.85rem">
+      Quick guide: <strong>opening_balance</strong> sets initial state · <strong>buy/sell</strong> changes asset quantity ·
+      <strong>deposit/withdraw/dividend/fee/interest</strong> changes a cash balance ·
+      <strong>repayment/principal_change</strong> changes liability principal · <strong>split</strong> multiplies asset quantity by the ratio in <em>quantity</em>.
+    </p>
+  </div>
+</details>
+
+<form method="get" class="toolbar">
+  <label class="field">Kind
+    <select name="kind">
+      <option value="">all</option>
+      <option value="asset"     {% if filters.kind == 'asset' %}selected{% endif %}>assets</option>
+      <option value="cash"      {% if filters.kind == 'cash' %}selected{% endif %}>cash</option>
+      <option value="liability" {% if filters.kind == 'liability' %}selected{% endif %}>liabilities</option>
+    </select>
+  </label>
+  <label class="field">Type
+    <select name="type">
+      <option value="">all</option>
+      {% for t in transaction_types %}<option value="{{ t }}" {% if filters.type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="field">Since
+    <input name="since" type="date" value="{{ filters.since or '' }}">
+  </label>
+  <label class="field">Until
+    <input name="until" type="date" value="{{ filters.until or '' }}">
+  </label>
+  {% if filters.entity_id %}<input type="hidden" name="entity_id" value="{{ filters.entity_id }}">{% endif %}
+  <button class="btn">Filter</button>
+  {% if filters.kind or filters.type or filters.since or filters.until or filters.entity_id %}
+  <a class="btn btn-ghost" href="/transactions">clear</a>
+  {% endif %}
+</form>
+
+<div class="card">
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Type</th>
+        <th>Entity</th>
+        <th class="num">Quantity</th>
+        <th class="num">Price</th>
+        <th class="num">Amount</th>
+        <th>Ccy</th>
+        <th class="num">Fees</th>
+        <th>Notes</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for tx in items %}
+      {% set name =
+        asset_names.get(tx.entity_id) if tx.entity_kind.value == 'asset'
+        else cash_names.get(tx.entity_id) if tx.entity_kind.value == 'cash'
+        else liab_names.get(tx.entity_id, tx.entity_id) %}
+      <tr>
+        <td class="mono">{{ tx.transaction_date }}</td>
+        <td><span class="pill kind-{{ tx.entity_kind.value }}">{{ tx.transaction_type.value }}</span></td>
+        <td>
+          <strong>{{ name or tx.entity_id[:8] }}</strong>
+          <div class="meta">{{ tx.entity_kind.value }}</div>
+        </td>
+        <td class="num">{{ "{:,.4f}".format(tx.quantity) if tx.quantity is not none else '—' }}</td>
+        <td class="num">{{ "{:,.4f}".format(tx.price) if tx.price is not none else '—' }}</td>
+        <td class="num">{{ "{:,.2f}".format(tx.amount) }}</td>
+        <td class="mono">{{ tx.currency }}</td>
+        <td class="num faint">{{ "{:,.2f}".format(tx.fees) if tx.fees else '—' }}</td>
+        <td class="muted">{{ tx.notes or '—' }}</td>
+        <td>
+          <form method="post" action="/transactions/{{ tx.transaction_id }}/delete" class="inline"
+                onsubmit="return confirm('Delete this transaction? Holdings will recompute.')">
+            <button class="btn btn-sm btn-danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="10" class="table-empty">No transactions yet — record one above.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+// Filter the entity dropdown to match the chosen entity kind.
+(function () {
+  const kindSel = document.getElementById("entity-kind");
+  const entitySel = document.getElementById("entity-id");
+  if (!kindSel || !entitySel) return;
+  function syncEntities() {
+    const k = kindSel.value;
+    entitySel.querySelectorAll("optgroup").forEach(og => {
+      og.style.display = (og.dataset.kind === k) ? "" : "none";
+      og.disabled = og.dataset.kind !== k;
+    });
+    // Pick the first visible option to avoid submitting a hidden value.
+    const firstVisible = entitySel.querySelector(`optgroup[data-kind="${k}"] option`);
+    if (firstVisible) entitySel.value = firstVisible.value;
+  }
+  // Auto-fill currency from entity selection.
+  const currencyInput = document.querySelector('input[name="currency"]');
+  function syncCurrency() {
+    const opt = entitySel.options[entitySel.selectedIndex];
+    if (opt && opt.dataset.currency && currencyInput) currencyInput.value = opt.dataset.currency;
+  }
+  kindSel.addEventListener("change", () => { syncEntities(); syncCurrency(); });
+  entitySel.addEventListener("change", syncCurrency);
+  syncEntities();
+  syncCurrency();
+})();
+</script>
+{% endblock %}

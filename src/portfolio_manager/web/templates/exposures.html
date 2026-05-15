@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block title %}Exposures{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@3.1.0/dist/chartjs-chart-treemap.min.js"></script>
+{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+  <div class="titles">
+    <span class="eyebrow">Composition</span>
+    <h1>Exposures</h1>
+  </div>
+  <p class="lede">A snapshot, sliced by class, currency, country, sector. Default is the most recent snapshot in your base currency.</p>
+</div>
+
+<form method="get" class="toolbar">
+  <label class="field">Snapshot
+    <select name="snapshot_id">
+      {% for s in snapshots %}
+        <option value="{{ s.snapshot_id }}" {% if s.snapshot_id == selected_snapshot_id %}selected{% endif %}>
+          {{ s.taken_at.strftime("%Y-%m-%d %H:%M") if s.taken_at.strftime else s.taken_at }} — {{ s.snapshot_id[:8] }}
+        </option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="field">Report in
+    <select name="currency">
+      {% for c in reporting_currencies %}<option value="{{ c }}" {% if c == currency %}selected{% endif %}>{{ c }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="field">Filter kind
+    <select name="kind">
+      <option value="">all</option>
+      <option value="asset"     {% if kind == 'asset' %}selected{% endif %}>assets</option>
+      <option value="cash"      {% if kind == 'cash' %}selected{% endif %}>cash</option>
+      <option value="liability" {% if kind == 'liability' %}selected{% endif %}>liabilities</option>
+    </select>
+  </label>
+  <button class="btn btn-primary">Apply</button>
+</form>
+
+{% if not selected_snapshot_id %}
+  <div class="empty">
+    <h2>No snapshot selected.</h2>
+    <p>Take a snapshot first — exposures are derived from snapshot positions.</p>
+  </div>
+{% else %}
+
+<div class="chart-card section" style="margin-top:0">
+  <div class="chart-head">
+    <div>
+      <h2>Concentration map</h2>
+      <div class="sub">Each tile = one position. Colour by class, area = value in {{ currency }}.</div>
+    </div>
+  </div>
+  <div class="chart-canvas tall"><canvas id="treemap"></canvas></div>
+</div>
+
+<script>
+(async function () {
+  const TREEMAP_PALETTE = {
+    "equity": "#1E40AF", "fixed_income": "#0E7490", "cash": "#166534",
+    "real_asset": "#92400E", "alternative": "#6B21A8", "other": "#9CA3AF",
+    "asset": "#1E40AF", "liability": "#991B1B",
+  };
+  const params = new URLSearchParams({
+    currency: "{{ currency }}",
+    snapshot_id: "{{ selected_snapshot_id }}",
+    kinds: {{ ('"' + kind + '"') if kind else '"asset,cash"' }},
+  });
+  const res = await fetch("/api/exposures/hierarchical?" + params).then(r => r.json());
+  if (!res.rows.length) {
+    document.getElementById("treemap").parentElement.innerHTML =
+      '<div class="chart-empty">No data for this snapshot.</div>';
+    return;
+  }
+  const ctx = document.getElementById("treemap").getContext("2d");
+  Chart.defaults.font.family = "Inter, sans-serif";
+  Chart.defaults.color = "#6B6B65";
+  new Chart(ctx, {
+    type: "treemap",
+    data: {
+      datasets: [{
+        tree: res.rows,
+        key: "value",
+        groups: ["group"],
+        spacing: 1,
+        borderWidth: 1,
+        borderColor: "#FFFFFF",
+        backgroundColor: (c) => {
+          if (!c.raw) return "#9CA3AF";
+          const g = (c.raw._data && c.raw._data.children && c.raw._data.children[0] && c.raw._data.children[0].group) || c.raw.g;
+          return TREEMAP_PALETTE[g] || "#9CA3AF";
+        },
+        labels: {
+          display: true,
+          color: "#FFFFFF",
+          font: { size: 11, weight: 500 },
+          formatter: (c) => {
+            if (!c.raw || !c.raw._data) return "";
+            const d = c.raw._data;
+            if (d.children) return [d.label || d.g, fmt(c.raw.v)];
+            return [d.name || d.label, fmt(c.raw.v)];
+          },
+          overflow: "fit",
+        },
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: "#0F0F0E", titleColor: "#FAFAF9", bodyColor: "#FAFAF9",
+          padding: 8, cornerRadius: 4,
+          callbacks: {
+            title: (items) => {
+              const d = items[0].raw._data;
+              return d.name || d.label || d.g || "";
+            },
+            label: (item) => fmt(item.raw.v) + " {{ currency }}",
+          },
+        },
+      },
+    },
+  });
+  function fmt(v) {
+    return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(v);
+  }
+})();
+</script>
+
+<div class="grid-cards">
+  {% for dim_label, key in [
+    ('Asset class',     'asset_class'),
+    ('Instrument',      'instrument_type'),
+    ('Currency',        'currency'),
+    ('Country',         'country'),
+    ('Sector',          'sector'),
+    ('Position kind',   'position_kind'),
+    ('Tag',             'tag'),
+  ] %}
+    <div class="card">
+      <div class="card-header"><h3>{{ dim_label }}</h3></div>
+      <div class="card-body dense">
+        <table class="mini-ledger">
+          <thead>
+            <tr>
+              <th>{{ dim_label }}</th>
+              <th class="num">Value</th>
+              <th class="share">Share</th>
+              <th class="num">#</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rows[key] %}
+            <tr>
+              <td class="label">{{ r.bucket if 'bucket' in r else r.tag or '—' }}</td>
+              <td class="num">{{ "{:,.0f}".format(r.value) }}</td>
+              <td class="share">
+                {{ "{:.1%}".format(r.share) }}
+                <span class="bar"><span style="width:{{ (r.share*100)|round(1) }}%"></span></span>
+              </td>
+              <td class="num faint">{{ r.positions }}</td>
+            </tr>
+            {% else %}
+            <tr><td class="label faint" colspan="4">no data</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

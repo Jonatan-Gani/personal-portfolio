@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div class="titles">
+    <span class="eyebrow">Configuration</span>
+    <h1>Settings</h1>
+  </div>
+  <p class="lede">Where your data lives and how to back it up. Everything is in a single DuckDB file —
+  copy that one file and you have everything.</p>
+</div>
+
+<div class="grid-2col">
+  <div class="card">
+    <div class="card-header"><h3>Database</h3></div>
+    <div class="card-body">
+      <table class="mini-ledger">
+        <tbody>
+          <tr><td class="label">Path</td><td class="num mono" style="text-align:left">{{ db.path }}</td></tr>
+          {% if db.exists %}
+          <tr><td class="label">Size</td><td class="num">{{ "{:,.1f}".format(db.size_kb) }} KB</td></tr>
+          <tr><td class="label">Last modified</td><td class="num mono" style="text-align:left">{{ db.modified }}</td></tr>
+          {% else %}
+          <tr><td class="label">Status</td><td class="num text-neg" style="text-align:left">file not found</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+      {% if db.exists %}
+      <div class="row-actions" style="margin-top:1rem">
+        <a class="btn btn-primary" href="/settings/download-backup">↓ Download .duckdb backup</a>
+        <a class="btn" href="/export/all.zip">↓ Export all (CSV ZIP)</a>
+      </div>
+      <p class="muted" style="font-size:12px;margin-top:1.25rem;line-height:1.6">
+        From the CLI: <code>portfolio backup</code> writes a timestamped copy to
+        <code>data/backups/</code>. <code>portfolio restore PATH</code> swaps a backup back in
+        (the prior live DB is kept as <code>.bak</code>).
+      </p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h3>Row counts</h3></div>
+    <div class="card-body dense">
+      <table class="mini-ledger">
+        <tbody>
+          {% for tbl, n in counts.items() %}
+          <tr><td class="label mono">{{ tbl }}</td><td class="num"><strong>{{ "{:,}".format(n) if n is number else n }}</strong></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="card section">
+  <div class="card-header"><h3>Tools</h3></div>
+  <div class="card-body">
+    <div class="tools-grid">
+      <a class="tool" href="/benchmarks">
+        <div class="tool-title">Benchmarks</div>
+        <div class="tool-sub">Indices &amp; funds to compare against (default S&amp;P 500)</div>
+      </a>
+      <a class="tool" href="/exposures">
+        <div class="tool-title">Exposure deep-dive</div>
+        <div class="tool-sub">Breakdowns by sector, instrument, tag, country</div>
+      </a>
+      <a class="tool" href="/snapshots">
+        <div class="tool-title">Snapshot history</div>
+        <div class="tool-sub">Every materialised valuation, auto + manual</div>
+      </a>
+    </div>
+  </div>
+</div>
+
+<div class="card section">
+  <div class="card-header"><h3>Configuration</h3></div>
+  <div class="card-body">
+    <table class="mini-ledger">
+      <tbody>
+        <tr><td class="label">Base currency</td><td class="num mono" style="text-align:left">{{ config.reporting.base_currency }}</td></tr>
+        <tr><td class="label">Reporting currencies</td><td class="num mono" style="text-align:left">{{ config.reporting.reporting_currencies | join(', ') }}</td></tr>
+        <tr><td class="label">FX provider</td><td class="num mono" style="text-align:left">{{ config.providers.fx.name }}</td></tr>
+        <tr><td class="label">Price provider</td><td class="num mono" style="text-align:left">{{ config.providers.price.name }}</td></tr>
+        <tr><td class="label">Auto-snapshot</td><td class="num mono" style="text-align:left">{{ 'enabled' if config.auto_snapshot.enabled else 'disabled' }} · stale after {{ config.auto_snapshot.stale_after_minutes }}m</td></tr>
+      </tbody>
+    </table>
+    <p class="muted" style="font-size:12px;margin-top:1.25rem">
+      Edit <code>config/config.yaml</code> to change these. Restart the web server after edits.
+    </p>
+  </div>
+</div>
+
+<style>
+  .tools-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: .75rem;
+  }
+  .tool {
+    display: block;
+    padding: .85rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    text-decoration: none;
+    transition: border-color .15s var(--ease), background .15s var(--ease);
+    color: var(--text);
+  }
+  .tool:hover {
+    border-color: var(--accent);
+    background: var(--surface-alt);
+    color: var(--text);
+  }
+  .tool-title { font-weight: 600; font-size: 13px; margin-bottom: .2rem; }
+  .tool-sub { font-size: 12px; color: var(--text-mute); }
+</style>
+{% endblock %}

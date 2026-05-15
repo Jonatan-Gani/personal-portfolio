@@ -1,0 +1,392 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/date-fns@3.6.0/cdn.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+  <div class="titles">
+    <span class="eyebrow">Dashboard</span>
+    <h1>Portfolio overview</h1>
+  </div>
+  <div class="row-actions">
+    {% if summary %}
+      <span class="muted" style="font-size:12px;">
+        Last updated <span class="mono">{{ summary.taken_at.strftime("%Y-%m-%d %H:%M UTC") if summary.taken_at.strftime else summary.taken_at }}</span>
+      </span>
+    {% endif %}
+    <a class="btn btn-sm" href="/?refresh=1" title="Take a fresh snapshot now">↻ Refresh</a>
+  </div>
+</div>
+
+{% if auto_taken %}
+<div class="banner">
+  Took an automatic snapshot — values are now up to date.
+</div>
+{% endif %}
+
+{% if not summary %}
+  <div class="empty">
+    <h2>No data yet.</h2>
+    <p>Add at least one asset, cash account or liability — then the app will start tracking automatically.
+    A snapshot is taken on first dashboard load and refreshed every {{ stale_after_minutes }} minutes.</p>
+    <div class="row-actions" style="justify-content:center;">
+      <a class="btn btn-primary" href="/assets">Add an asset</a>
+      <a class="btn" href="/cash">Add cash</a>
+      <a class="btn" href="/benchmarks">Configure benchmarks</a>
+    </div>
+  </div>
+{% else %}
+
+<div class="kpi-grid">
+  <div class="kpi">
+    <div class="lbl">Net worth</div>
+    <div class="val lg">{{ "{:,.0f}".format(summary.net_worth) }}<span class="faint" style="font-size:0.65em;font-weight:400;margin-left:.4rem;">{{ base_currency }}</span></div>
+  </div>
+  <div class="kpi">
+    <div class="lbl">Assets</div>
+    <div class="val">{{ "{:,.0f}".format(summary.assets) }}</div>
+  </div>
+  <div class="kpi">
+    <div class="lbl">Cash</div>
+    <div class="val">{{ "{:,.0f}".format(summary.cash) }}</div>
+  </div>
+  <div class="kpi">
+    <div class="lbl">Liabilities</div>
+    <div class="val text-neg">{{ "{:,.0f}".format(summary.liabilities) }}</div>
+  </div>
+</div>
+
+<div class="grid-2col">
+  <div class="chart-card">
+    <div class="chart-head">
+      <div>
+        <h2>Net worth over time</h2>
+        <div class="sub">Each point is a snapshot, valued at then-current FX.</div>
+      </div>
+      <div class="chart-toolbar">
+        <div class="segmented" id="nw-currency-toggle" data-target="net-worth">
+          {% for c in reporting_currencies %}
+            <button data-ccy="{{ c }}" {% if c == base_currency %}class="active"{% endif %}>{{ c }}</button>
+          {% endfor %}
+        </div>
+        {% if benchmarks %}
+        <div class="segmented" id="nw-benchmark-toggle">
+          <button data-benchmark="" class="active">No benchmark</button>
+          {% for b in benchmarks %}
+            <button data-benchmark="{{ b.benchmark_id }}" data-symbol="{{ b.symbol }}">{{ b.name }}</button>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="chart-canvas tall" id="net-worth-canvas-wrap">
+      <canvas id="net-worth-chart"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-head">
+      <div>
+        <h2>Allocation</h2>
+        <div class="sub">Latest snapshot · in <span class="mono">{{ base_currency }}</span></div>
+      </div>
+      <div class="chart-toolbar">
+        <div class="segmented" id="alloc-dim-toggle">
+          <button data-dim="asset_class" class="active">Class</button>
+          <button data-dim="currency">Currency</button>
+          <button data-dim="country">Country</button>
+        </div>
+      </div>
+    </div>
+    <div class="chart-canvas tall">
+      <canvas id="allocation-chart"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="grid-3col">
+  <div class="card">
+    <div class="card-header"><h3>By position kind</h3></div>
+    <div class="card-body dense">
+      <table class="mini-ledger">
+        <tbody>
+          {% for r in by_kind %}
+          <tr>
+            <td class="label">{{ r.bucket or '—' }}</td>
+            <td class="num">{{ "{:,.0f}".format(r.value) }}</td>
+            <td class="share">{{ "{:.1%}".format(r.share) }}</td>
+          </tr>
+          {% else %}
+          <tr><td class="label faint" colspan="3">no data</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><h3>By asset class</h3></div>
+    <div class="card-body dense">
+      <table class="mini-ledger">
+        <tbody>
+          {% for r in by_class %}
+          <tr>
+            <td class="label">{{ r.bucket or '—' }}</td>
+            <td class="num">{{ "{:,.0f}".format(r.value) }}</td>
+            <td class="share">
+              {{ "{:.1%}".format(r.share) }}
+              <span class="bar"><span style="width:{{ (r.share*100)|round(1) }}%"></span></span>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td class="label faint" colspan="3">no data</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><h3>By currency</h3></div>
+    <div class="card-body dense">
+      <table class="mini-ledger">
+        <tbody>
+          {% for r in by_currency %}
+          <tr>
+            <td class="label">{{ r.bucket or '—' }}</td>
+            <td class="num">{{ "{:,.0f}".format(r.value) }}</td>
+            <td class="share">
+              {{ "{:.1%}".format(r.share) }}
+              <span class="bar"><span style="width:{{ (r.share*100)|round(1) }}%"></span></span>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td class="label faint" colspan="3">no data</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const COLOR_PRIMARY  = "#1E40AF";
+  const COLOR_GRID     = "#EDEDEA";
+  const COLOR_TEXT     = "#6B6B65";
+  const COLOR_BENCH    = "#92400E";
+  const ALLOC_PALETTE  = [
+    "#1E40AF", "#0E7490", "#166534", "#92400E", "#7C2D12",
+    "#6B21A8", "#1F2937", "#9CA3AF", "#DC2626", "#B45309",
+  ];
+  const BASE_CCY = {{ base_currency | tojson }};
+  const REPORTING = {{ reporting_currencies | tojson }};
+  const BENCHMARKS = {{ benchmarks | map(attribute='benchmark_id') | list | tojson }};
+
+  Chart.defaults.font.family = "Inter, sans-serif";
+  Chart.defaults.font.size = 11;
+  Chart.defaults.color = COLOR_TEXT;
+
+  let netWorthChart = null;
+  let allocChart = null;
+
+  function fmtMoney(v, ccy) {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency", currency: ccy, maximumFractionDigits: 0,
+    }).format(v);
+  }
+
+  function dateLabel(iso) {
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" });
+  }
+
+  // -------------- net worth + benchmark line
+  async function loadNetWorth(ccy, benchmarkId) {
+    const params = new URLSearchParams({ currency: ccy });
+    const nw = await fetch("/api/timeseries/networth?" + params).then(r => r.json());
+
+    let bench = null;
+    if (benchmarkId) {
+      bench = await fetch("/api/timeseries/benchmark/" + encodeURIComponent(benchmarkId)).then(r => r.json());
+    }
+
+    const nwPoints = nw.points.map(p => ({ x: p.taken_at, y: p.net_worth }));
+
+    let benchScaled = null, benchLabel = null;
+    if (bench && bench.points.length && nwPoints.length) {
+      const nw0 = nwPoints[0].y;
+      const benchAtStart = bench.points[0].price;
+      const scale = benchAtStart > 0 ? nw0 / benchAtStart : 1;
+      benchScaled = bench.points.map(p => ({ x: p.date, y: p.price * scale }));
+      benchLabel = `${bench.name} (rebased to start)`;
+    }
+
+    const datasets = [
+      {
+        label: "Net worth",
+        data: nwPoints,
+        borderColor: COLOR_PRIMARY,
+        backgroundColor: "rgba(30, 64, 175, 0.08)",
+        borderWidth: 1.8,
+        fill: true,
+        tension: 0.15,
+        pointRadius: 2.5,
+        pointHoverRadius: 4,
+      },
+    ];
+    if (benchScaled) {
+      datasets.push({
+        label: benchLabel,
+        data: benchScaled,
+        borderColor: COLOR_BENCH,
+        backgroundColor: "transparent",
+        borderWidth: 1.5,
+        borderDash: [4, 3],
+        fill: false,
+        tension: 0.15,
+        pointRadius: 0,
+        pointHoverRadius: 3,
+      });
+    }
+
+    if (netWorthChart) netWorthChart.destroy();
+    const ctx = document.getElementById("net-worth-chart").getContext("2d");
+    netWorthChart = new Chart(ctx, {
+      type: "line",
+      data: { datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        parsing: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { position: "bottom", labels: { boxWidth: 10, boxHeight: 10, padding: 12 } },
+          tooltip: {
+            backgroundColor: "#0F0F0E", titleColor: "#FAFAF9", bodyColor: "#FAFAF9", borderWidth: 0,
+            padding: 8, cornerRadius: 4, boxPadding: 4,
+            callbacks: {
+              title: items => items.length ? dateLabel(items[0].parsed.x) : "",
+              label: ctx => `${ctx.dataset.label}: ${fmtMoney(ctx.parsed.y, ccy)}`,
+            },
+          },
+        },
+        scales: {
+          x: {
+            type: "time",
+            time: { tooltipFormat: "yyyy-MM-dd HH:mm", displayFormats: { day: "MMM d", month: "MMM yyyy" } },
+            grid: { display: false },
+            ticks: { maxTicksLimit: 8 },
+          },
+          y: {
+            grid: { color: COLOR_GRID, drawBorder: false },
+            ticks: {
+              callback: v => fmtMoney(v, ccy).replace(/\.\d+/, ""),
+            },
+          },
+        },
+      },
+    });
+  }
+
+  // -------------- allocation donut
+  // asset_class only makes sense for assets; for currency/country we also include cash.
+  const ALLOC_KINDS = { asset_class: "asset", currency: "asset,cash", country: "asset,cash" };
+
+  async function loadAllocation(dim) {
+    const params = new URLSearchParams({ dim, currency: BASE_CCY });
+    if (ALLOC_KINDS[dim]) params.set("kinds", ALLOC_KINDS[dim]);
+    const res = await fetch("/api/allocation/latest?" + params).then(r => r.json());
+
+    if (allocChart) allocChart.destroy();
+
+    const labels = res.rows.map(r => r.label || "—");
+    const values = res.rows.map(r => r.value);
+    if (values.length === 0) {
+      const ctx = document.getElementById("allocation-chart");
+      ctx.parentElement.innerHTML = '<div class="chart-empty">No allocation data for the latest snapshot.</div>';
+      return;
+    }
+
+    const ctx = document.getElementById("allocation-chart").getContext("2d");
+    allocChart = new Chart(ctx, {
+      type: "doughnut",
+      data: {
+        labels,
+        datasets: [{
+          data: values,
+          backgroundColor: ALLOC_PALETTE.slice(0, values.length),
+          borderColor: "#FFFFFF",
+          borderWidth: 2,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: "62%",
+        plugins: {
+          legend: {
+            position: "right",
+            labels: { boxWidth: 10, boxHeight: 10, padding: 8, font: { size: 11 } },
+          },
+          tooltip: {
+            backgroundColor: "#0F0F0E", titleColor: "#FAFAF9", bodyColor: "#FAFAF9",
+            padding: 8, cornerRadius: 4, boxPadding: 4,
+            callbacks: {
+              label: ctx => {
+                const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                const pct = total ? (ctx.parsed / total) : 0;
+                return `${ctx.label}: ${fmtMoney(ctx.parsed, BASE_CCY)} (${(pct * 100).toFixed(1)}%)`;
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  // -------------- toolbars
+  let activeCcy = BASE_CCY;
+  let activeBench = "";
+
+  document.querySelectorAll("#nw-currency-toggle button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#nw-currency-toggle button").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      activeCcy = btn.dataset.ccy;
+      loadNetWorth(activeCcy, activeBench);
+    });
+  });
+
+  const benchToggle = document.getElementById("nw-benchmark-toggle");
+  if (benchToggle) {
+    benchToggle.querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        benchToggle.querySelectorAll("button").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        activeBench = btn.dataset.benchmark || "";
+        loadNetWorth(activeCcy, activeBench);
+      });
+    });
+  }
+
+  document.querySelectorAll("#alloc-dim-toggle button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#alloc-dim-toggle button").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      loadAllocation(btn.dataset.dim);
+    });
+  });
+
+  // initial load
+  loadNetWorth(activeCcy, activeBench);
+  loadAllocation("asset_class");
+})();
+</script>
+
+{% endif %}
+{% endblock %}

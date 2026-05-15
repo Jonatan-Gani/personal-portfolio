@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Liabilities{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div class="titles">
+    <span class="eyebrow">What you owe</span>
+    <h1>Debts</h1>
+  </div>
+  <div style="display:flex;align-items:end;gap:1rem">
+    <p class="lede" style="margin-right:1rem">Mortgages, loans, credit lines. Subtracted from your assets on every snapshot to get net worth.</p>
+    <a class="btn btn-sm" href="/export/liabilities.csv">↓ CSV</a>
+  </div>
+</div>
+
+<div class="kpi-grid" style="grid-template-columns: repeat(2, minmax(200px, 1fr));max-width:520px;margin-bottom:1.5rem">
+  <div class="kpi" style="border-left: 3px solid #B91C1C">
+    <div class="lbl">Total debts</div>
+    <div class="val">{{ "{:,.0f}".format(debts_total) }} <span class="faint" style="font-size:.6em">{{ base_currency }}</span></div>
+  </div>
+  <div class="kpi">
+    <div class="lbl">Lines open</div>
+    <div class="val">{{ items | length }}</div>
+  </div>
+</div>
+
+<details class="drawer">
+  <summary>Add liability</summary>
+  <div class="drawer-body">
+    <form method="post" action="/liabilities" class="field-row">
+      <label class="field">Name <input name="name" required></label>
+      <label class="field">Type
+        <select name="liability_type">
+          {% for t in liability_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="field">Currency <input name="currency" required maxlength="3" list="ccy-list"></label>
+      <label class="field">Opening balance
+        <input name="opening_balance" type="number" step="any" required>
+        <span class="hint">creates an OPENING_BALANCE transaction</span>
+      </label>
+      <label class="field">Interest rate (decimal)
+        <input name="interest_rate" type="number" step="any" placeholder="e.g. 0.045 for 4.5%">
+        <span class="hint">APR — accrues daily on each snapshot</span>
+      </label>
+      <label class="field">Tags <input name="tags" placeholder="comma, separated"></label>
+      <label class="field span-2">Notes <input name="notes"></label>
+      <button class="btn btn-primary span-4" style="justify-self:start">Add liability</button>
+    </form>
+  </div>
+</details>
+
+<div class="card">
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Liability</th>
+        <th>Type</th>
+        <th>Ccy</th>
+        <th class="num">Principal</th>
+        <th class="num">Rate</th>
+        <th>Tags</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for l in items %}
+      <tr class="{{ 'inactive' if not l.is_active }}">
+        <td><strong>{{ l.name }}</strong></td>
+        <td>{{ l.liability_type.value }}</td>
+        <td class="mono">{{ l.currency }}</td>
+        <td class="num">
+          <strong>{{ "{:,.2f}".format(principals.get(l.liability_id, 0)) }}</strong>
+          <div class="meta"><a href="/transactions?entity_id={{ l.liability_id }}&kind=liability">history</a></div>
+        </td>
+        <td class="num">{% if l.interest_rate is not none %}{{ "{:.3%}".format(l.interest_rate) }}{% else %}—{% endif %}</td>
+        <td>
+          {% if l.tags %}
+            <div class="tag-list">{% for t in l.tags %}<span class="tag">{{ t }}</span>{% endfor %}</div>
+          {% else %}<span class="faint">—</span>{% endif %}
+        </td>
+        <td><span class="pill {{ 'active' if l.is_active else 'inactive' }}">{{ 'active' if l.is_active else 'inactive' }}</span></td>
+        <td>
+          <div class="row-actions">
+            <details class="row-edit">
+              <summary>Edit</summary>
+              <div class="row-edit-body">
+                <form method="post" action="/liabilities/{{ l.liability_id }}/update" class="field-row">
+                  <label class="field">Name <input name="name" value="{{ l.name }}" required></label>
+                  <label class="field">Type
+                    <select name="liability_type">
+                      {% for t in liability_types %}<option value="{{ t }}" {% if t == l.liability_type.value %}selected{% endif %}>{{ t }}</option>{% endfor %}
+                    </select>
+                  </label>
+                  <label class="field">Ccy <input name="currency" value="{{ l.currency }}" list="ccy-list" required></label>
+                  <label class="field">Rate <input name="interest_rate" type="number" step="any" value="{{ l.interest_rate or '' }}"></label>
+                  <label class="field">Tags <input name="tags" value="{{ l.tags|join(', ') }}"></label>
+                  <label class="field span-2">Notes <input name="notes" value="{{ l.notes or '' }}"></label>
+                  <div class="span-4 row-actions">
+                    <button class="btn btn-primary">Save</button>
+                  </div>
+                </form>
+              </div>
+            </details>
+            {% if l.is_active %}
+              <form method="post" action="/liabilities/{{ l.liability_id }}/delete" class="inline"><button class="btn btn-sm btn-danger">Deactivate</button></form>
+            {% else %}
+              <form method="post" action="/liabilities/{{ l.liability_id }}/delete?hard=true" class="inline"
+                    onsubmit="return confirm('Permanently delete?')"><button class="btn btn-sm btn-danger">Hard delete</button></form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="table-empty">No liabilities.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

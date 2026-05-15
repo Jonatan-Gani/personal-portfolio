@@ -1,0 +1,32 @@
+database:
+  path: data/portfolio.duckdb
+
+logging:
+  level: INFO
+  json_format: false
+
+reporting:
+  base_currency: USD
+  reporting_currencies: [USD, SEK, ILS, EUR, GBP]
+
+providers:
+  fx:
+    name: ecb
+    options:
+      timeout_seconds: 15
+      cache_ttl_hours: 12
+  price:
+    name: yfinance
+    options:
+      timeout_seconds: 15
+      cache_ttl_hours: 12
+
+web:
+  host: 127.0.0.1
+  port: 8000
+  reload: false
+
+auto_snapshot:
+  enabled: true
+  stale_after_minutes: 360       # take a fresh snapshot if the latest is older than this
+  backfill_benchmarks_on_seed: true

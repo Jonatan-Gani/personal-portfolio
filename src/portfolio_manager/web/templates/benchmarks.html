@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Benchmarks{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div class="titles">
+    <span class="eyebrow">Compare against</span>
+    <h1>Benchmarks</h1>
+  </div>
+  <div style="display:flex;align-items:end;gap:1rem">
+    <p class="lede" style="margin-right:1rem">Indices and funds you want to compare your portfolio to. Daily prices are fetched
+    on each snapshot; backfill pulls one year of history. Defaults to the S&amp;P 500.</p>
+    <a class="btn btn-sm" href="/export/benchmarks.csv">↓ CSV</a>
+  </div>
+</div>
+
+<details class="drawer">
+  <summary>Add benchmark</summary>
+  <div class="drawer-body">
+    <form method="post" action="/benchmarks" class="field-row">
+      <label class="field span-2">Name <input name="name" required placeholder="e.g. S&amp;P 500" /></label>
+      <label class="field">Symbol
+        <input name="symbol" required list="benchmark-list" placeholder="^GSPC" />
+        <span class="hint">yfinance ticker · use the suggestion list or type your own</span>
+      </label>
+      <label class="field">Currency <input name="currency" required maxlength="3" list="ccy-list" placeholder="USD" /></label>
+      <label class="field">Country <input name="country" maxlength="2" list="country-list" placeholder="US" /></label>
+      <label class="field">Price provider
+        <select name="price_provider">
+          <option value="">use default</option>
+          <option value="yfinance">yfinance</option>
+          <option value="mock">mock</option>
+        </select>
+      </label>
+      <label class="field span-2">Notes <input name="notes" /></label>
+      <button class="btn btn-primary span-4" style="justify-self:start">Add benchmark</button>
+    </form>
+  </div>
+</details>
+
+<div class="card">
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Symbol</th>
+        <th>Currency</th>
+        <th>Country</th>
+        <th>Provider</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in items %}
+      <tr class="{{ 'inactive' if not b.is_active }}">
+        <td><strong>{{ b.name }}</strong>
+          {% if b.notes %}<div class="meta">{{ b.notes }}</div>{% endif %}
+        </td>
+        <td class="mono">{{ b.symbol }}</td>
+        <td class="mono">{{ b.currency }}</td>
+        <td class="mono faint">{{ b.country or '—' }}</td>
+        <td class="muted">{{ b.price_provider or 'default' }}</td>
+        <td><span class="pill {{ 'active' if b.is_active else 'inactive' }}">{{ 'active' if b.is_active else 'inactive' }}</span></td>
+        <td>
+          <div class="row-actions">
+            <details class="row-edit">
+              <summary>Edit</summary>
+              <div class="row-edit-body">
+                <form method="post" action="/benchmarks/{{ b.benchmark_id }}/update" class="field-row">
+                  <label class="field span-2">Name <input name="name" value="{{ b.name }}" required /></label>
+                  <label class="field">Symbol <input name="symbol" value="{{ b.symbol }}" list="benchmark-list" required /></label>
+                  <label class="field">Currency <input name="currency" value="{{ b.currency }}" list="ccy-list" required /></label>
+                  <label class="field">Country <input name="country" value="{{ b.country or '' }}" list="country-list" /></label>
+                  <label class="field">Provider
+                    <select name="price_provider">
+                      <option value="" {% if not b.price_provider %}selected{% endif %}>default</option>
+                      <option value="yfinance" {% if b.price_provider == 'yfinance' %}selected{% endif %}>yfinance</option>
+                      <option value="mock" {% if b.price_provider == 'mock' %}selected{% endif %}>mock</option>
+                    </select>
+                  </label>
+                  <label class="field span-2">Notes <input name="notes" value="{{ b.notes or '' }}" /></label>
+                  <div class="span-4 row-actions">
+                    <button class="btn btn-primary">Save</button>
+                  </div>
+                </form>
+              </div>
+            </details>
+            <form method="post" action="/benchmarks/{{ b.benchmark_id }}/backfill?days=365" class="inline">
+              <button class="btn btn-sm" title="Backfill 365 days of price history">Backfill</button>
+            </form>
+            {% if b.is_active %}
+              <form method="post" action="/benchmarks/{{ b.benchmark_id }}/delete" class="inline">
+                <button class="btn btn-sm btn-danger">Deactivate</button>
+              </form>
+            {% else %}
+              <form method="post" action="/benchmarks/{{ b.benchmark_id }}/delete?hard=true" class="inline"
+                    onsubmit="return confirm('Permanently delete?')">
+                <button class="btn btn-sm btn-danger">Hard delete</button>
+              </form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="table-empty">No benchmarks yet. Run <code>portfolio init-db</code> to seed the S&amp;P 500, or add one above.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

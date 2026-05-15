@@ -1,0 +1,371 @@
+{% extends "base.html" %}
+{% block title %}Performance{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/date-fns@3.6.0/cdn.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+  <div class="titles">
+    <span class="eyebrow">Returns &amp; risk</span>
+    <h1>Performance</h1>
+  </div>
+  <p class="lede">Time-weighted return measures investment skill (insulated from your contributions);
+    money-weighted (XIRR) measures the actual experience of your wallet. Both, plus drawdown
+    and risk metrics, computed off the snapshot history.</p>
+</div>
+
+<div class="card section" style="margin-top:0">
+  <div class="card-body">
+    <div class="compare-toolbar">
+      <div class="compare-block">
+        <div class="compare-label">Window</div>
+        <div class="segmented" id="period-chips">
+          <button data-period="1m">1M</button>
+          <button data-period="3m">3M</button>
+          <button data-period="ytd" class="active">YTD</button>
+          <button data-period="1y">1Y</button>
+          <button data-period="3y">3Y</button>
+          <button data-period="5y">5Y</button>
+          <button data-period="max">MAX</button>
+        </div>
+      </div>
+      <div class="compare-block">
+        <div class="compare-label">Currency</div>
+        <select id="currency-select" class="ctl-select">
+          {% for c in reporting_currencies %}
+            <option value="{{ c }}" {% if c == base_currency %}selected{% endif %}>{{ c }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="compare-block">
+        <div class="compare-label">Benchmark (for risk)</div>
+        <select id="benchmark-select" class="ctl-select">
+          <option value="">— none —</option>
+          {% for b in benchmarks %}<option value="{{ b.benchmark_id }}">{{ b.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="compare-block">
+        <div class="compare-label">Risk-free (annual %)</div>
+        <input id="rf-input" type="number" step="0.1" min="0" max="20" value="0" class="ctl-select" style="min-width:6rem">
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="kpi-grid" id="perf-kpis">
+  <div class="kpi"><div class="lbl">Time-weighted</div><div class="val lg" id="kpi-twr">—</div><div class="sub" id="kpi-twr-ann"></div></div>
+  <div class="kpi"><div class="lbl">Money-weighted (XIRR)</div><div class="val lg" id="kpi-xirr">—</div><div class="sub" id="kpi-xirr-meta"></div></div>
+  <div class="kpi"><div class="lbl">Max drawdown</div><div class="val lg text-neg" id="kpi-maxdd">—</div><div class="sub" id="kpi-maxdd-at"></div></div>
+  <div class="kpi"><div class="lbl">Annualised vol</div><div class="val" id="kpi-vol">—</div><div class="sub" id="kpi-sharpe">Sharpe —</div></div>
+  <div class="kpi"><div class="lbl">Beta</div><div class="val" id="kpi-beta">—</div><div class="sub" id="kpi-corr">corr —</div></div>
+</div>
+
+<div class="grid-2col">
+  <div class="chart-card">
+    <div class="chart-head">
+      <div>
+        <h2>Net worth &amp; drawdown</h2>
+        <div class="sub">Equity curve above, underwater curve below.</div>
+      </div>
+    </div>
+    <div class="chart-canvas tall"><canvas id="dd-chart"></canvas></div>
+  </div>
+  <div class="chart-card">
+    <div class="chart-head">
+      <div>
+        <h2>Cash flow vs market P&amp;L</h2>
+        <div class="sub">Bars: contributions/withdrawals/income. Line: market gain.</div>
+      </div>
+    </div>
+    <div class="chart-canvas tall"><canvas id="cf-chart"></canvas></div>
+  </div>
+</div>
+
+<div class="chart-card section">
+  <div class="chart-head">
+    <div>
+      <h2>Compare</h2>
+      <div class="sub" id="compare-subtitle">Pick portfolio, assets, or benchmarks to chart side-by-side.</div>
+    </div>
+    <div class="chart-toolbar">
+      <div class="segmented" id="mode-toggle">
+        <button data-rebase="0" class="active">Absolute</button>
+        <button data-rebase="1">Rebase to 100</button>
+      </div>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="compare-series">
+      <div class="compare-series-group">
+        <div class="compare-label">Portfolio</div>
+        <label class="ckbox"><input type="checkbox" class="series-toggle" value="portfolio" checked> Total net worth</label>
+      </div>
+      <div class="compare-series-group">
+        <div class="compare-label">Assets</div>
+        {% for a in assets %}
+          <label class="ckbox"><input type="checkbox" class="series-toggle" value="asset:{{ a.asset_id }}"> {{ a.name }}<span class="faint mono"> · {{ a.symbol or a.currency }}</span></label>
+        {% else %}<span class="faint">no assets</span>{% endfor %}
+      </div>
+      <div class="compare-series-group">
+        <div class="compare-label">Benchmarks</div>
+        {% for b in benchmarks %}
+          <label class="ckbox"><input type="checkbox" class="series-toggle" value="benchmark:{{ b.benchmark_id }}"> {{ b.name }}<span class="faint mono"> · {{ b.symbol }}</span></label>
+        {% else %}<span class="faint">no benchmarks</span>{% endfor %}
+      </div>
+    </div>
+  </div>
+  <div class="chart-canvas tall"><canvas id="compare-chart"></canvas></div>
+</div>
+
+<div class="card section">
+  <div class="card-header">
+    <h3>Snapshot diff</h3>
+  </div>
+  <div class="card-body">
+    <form action="" onsubmit="return jumpDiff(event)" class="field-row">
+      <label class="field span-2">From snapshot
+        <select id="diff-from">
+          {% for s in snapshots %}
+            <option value="{{ s.snapshot_id }}">{{ s.taken_at.strftime("%Y-%m-%d %H:%M") if s.taken_at.strftime else s.taken_at }} · {{ s.snapshot_id[:8] }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="field span-2">To snapshot
+        <select id="diff-to">
+          {% for s in snapshots %}
+            <option value="{{ s.snapshot_id }}" {% if loop.first %}selected{% endif %}>{{ s.taken_at.strftime("%Y-%m-%d %H:%M") if s.taken_at.strftime else s.taken_at }} · {{ s.snapshot_id[:8] }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button class="btn btn-primary span-4" style="justify-self:start">Compare snapshots →</button>
+    </form>
+  </div>
+</div>
+
+<style>
+  .compare-toolbar {
+    display: grid; grid-template-columns: 1fr auto auto auto;
+    gap: 1.25rem 2rem; align-items: end;
+  }
+  .compare-block { display: flex; flex-direction: column; gap: .4rem; }
+  .compare-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--text-mute); font-weight: 500; }
+  .ctl-select {
+    font-family: var(--sans); font-size: 13px;
+    background: var(--surface); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: .35rem .6rem; min-width: 11rem;
+  }
+  .ctl-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .compare-series { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem 2rem; }
+  .compare-series-group { display: flex; flex-direction: column; gap: .35rem; }
+  .ckbox { display: inline-flex; align-items: center; gap: .55rem; font-size: 13px; color: var(--text); cursor: pointer; user-select: none; }
+  .ckbox input { accent-color: var(--accent); cursor: pointer; }
+  @media (max-width: 980px) { .compare-toolbar { grid-template-columns: 1fr 1fr; } }
+</style>
+
+<script>
+(function () {
+  const PALETTE = ["#1E40AF","#0E7490","#166534","#92400E","#7C2D12","#6B21A8","#1F2937","#9CA3AF","#DC2626","#B45309"];
+  Chart.defaults.font.family = "Inter, sans-serif";
+  Chart.defaults.font.size = 11;
+  Chart.defaults.color = "#6B6B65";
+
+  let activePeriod = "ytd";
+  let activeRebase = false;
+  let ddChart = null, cfChart = null, compareChart = null;
+
+  function fmtPct(v, digits) {
+    digits = digits == null ? 2 : digits;
+    if (v == null) return "—";
+    const sign = v > 0 ? "+" : "";
+    return sign + (v * 100).toFixed(digits) + "%";
+  }
+  function fmtMoney(v, ccy) {
+    if (v == null) return "—";
+    try { return new Intl.NumberFormat(undefined, { style: "currency", currency: ccy, maximumFractionDigits: 0 }).format(v); }
+    catch (_e) { return v.toFixed(0) + " " + ccy; }
+  }
+  function fmtNumber(v) { return v == null ? "—" : v.toLocaleString(undefined, { maximumFractionDigits: 2 }); }
+
+  function commonOpts(ccy) {
+    return {
+      x: {
+        type: "time",
+        time: { tooltipFormat: "yyyy-MM-dd", displayFormats: { day: "MMM d", month: "MMM yyyy", year: "yyyy" } },
+        grid: { display: false }, ticks: { maxTicksLimit: 8 },
+      },
+      y: { grid: { color: "#EDEDEA" }, ticks: { callback: v => fmtMoney(v, ccy).replace(/\.\d+/, "") } },
+    };
+  }
+
+  // ─────────────────────────────────────────── Performance KPIs + drawdown
+  async function loadHeadline() {
+    const ccy = document.getElementById("currency-select").value;
+    const bench = document.getElementById("benchmark-select").value;
+    const rf = parseFloat(document.getElementById("rf-input").value || "0") / 100;
+    const params = new URLSearchParams({ currency: ccy, period: activePeriod, risk_free: rf });
+    if (bench) params.set("benchmark_id", bench);
+    const res = await fetch("/api/performance?" + params).then(r => r.json());
+
+    const t = res.twr || {};
+    const x = res.xirr || {};
+    const dd = res.drawdown || {};
+    const r = res.risk || {};
+
+    document.getElementById("kpi-twr").textContent = fmtPct(t.twr);
+    document.getElementById("kpi-twr").className = "val lg " + classOf(t.twr);
+    document.getElementById("kpi-twr-ann").textContent = t.annualized != null ? `${fmtPct(t.annualized)} annualised` : `${(t.sub_periods || 0)} sub-periods`;
+
+    document.getElementById("kpi-xirr").textContent = fmtPct(x.xirr);
+    document.getElementById("kpi-xirr").className = "val lg " + classOf(x.xirr);
+    document.getElementById("kpi-xirr-meta").textContent = `${x.n_flows || 0} cash flows · annualised`;
+
+    document.getElementById("kpi-maxdd").textContent = fmtPct(dd.max_drawdown);
+    document.getElementById("kpi-maxdd-at").textContent = dd.max_drawdown_at ? `at ${dd.max_drawdown_at.slice(0,10)}` : (dd.current_drawdown != null ? `currently ${fmtPct(dd.current_drawdown)}` : "");
+
+    document.getElementById("kpi-vol").textContent = r.annualized_volatility != null ? fmtPct(r.annualized_volatility) : "—";
+    document.getElementById("kpi-sharpe").textContent = "Sharpe " + (r.annualized_sharpe != null ? r.annualized_sharpe.toFixed(2) : "—");
+    document.getElementById("kpi-beta").textContent = r.beta != null ? r.beta.toFixed(2) : "—";
+    document.getElementById("kpi-corr").textContent = "corr " + (r.correlation != null ? r.correlation.toFixed(2) : "—") + (r.benchmark_name ? ` · vs ${r.benchmark_name}` : "");
+
+    // Drawdown chart
+    const ddSeries = await fetch("/api/timeseries/drawdown?" + new URLSearchParams({ currency: ccy, period: activePeriod })).then(r => r.json());
+    if (ddChart) ddChart.destroy();
+    const ddCtx = document.getElementById("dd-chart").getContext("2d");
+    const navData = ddSeries.points.map(p => ({ x: p.when, y: p.nav }));
+    const peakData = ddSeries.points.map(p => ({ x: p.when, y: p.peak }));
+    const drawDownData = ddSeries.points.map(p => ({ x: p.when, y: p.drawdown * 100 }));
+    ddChart = new Chart(ddCtx, {
+      data: {
+        datasets: [
+          { type: "line", label: "Net worth", data: navData, borderColor: "#1E40AF", backgroundColor: "rgba(30,64,175,0.06)", borderWidth: 1.6, pointRadius: 0, fill: true, tension: 0.15, yAxisID: "y" },
+          { type: "line", label: "Running peak", data: peakData, borderColor: "#9CA3AF", borderDash: [2, 3], borderWidth: 1, pointRadius: 0, fill: false, yAxisID: "y" },
+          { type: "line", label: "Drawdown %", data: drawDownData, borderColor: "#991B1B", backgroundColor: "rgba(153,27,27,0.10)", borderWidth: 1.4, pointRadius: 0, fill: true, tension: 0.1, yAxisID: "y2" },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, parsing: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: { legend: { position: "bottom", labels: { boxWidth: 10, boxHeight: 10, padding: 12 } },
+          tooltip: { backgroundColor: "#0F0F0E", titleColor: "#FAFAF9", bodyColor: "#FAFAF9", padding: 8, cornerRadius: 4 } },
+        scales: {
+          x: { type: "time", time: { tooltipFormat: "yyyy-MM-dd" }, grid: { display: false }, ticks: { maxTicksLimit: 8 } },
+          y: { position: "left", grid: { color: "#EDEDEA" }, ticks: { callback: v => fmtMoney(v, ccy).replace(/\.\d+/, "") } },
+          y2: { position: "right", grid: { display: false }, ticks: { callback: v => v.toFixed(1) + "%" }, max: 0, suggestedMin: -25 },
+        },
+      },
+    });
+
+    // Cash-flow chart (full window so far — simple)
+    const cf = await fetch("/api/cashflow/monthly?" + new URLSearchParams({ currency: ccy })).then(r => r.json());
+    if (cfChart) cfChart.destroy();
+    const cfCtx = document.getElementById("cf-chart").getContext("2d");
+    const labels = cf.rows.map(r => r.month);
+    cfChart = new Chart(cfCtx, {
+      data: {
+        labels,
+        datasets: [
+          { type: "bar", label: "Deposits",    data: cf.rows.map(r => r.deposits),    backgroundColor: "#166534", stack: "ext" },
+          { type: "bar", label: "Withdrawals", data: cf.rows.map(r => -r.withdrawals), backgroundColor: "#991B1B", stack: "ext" },
+          { type: "bar", label: "Dividends",   data: cf.rows.map(r => r.dividends),   backgroundColor: "#0E7490", stack: "inc" },
+          { type: "bar", label: "Interest",    data: cf.rows.map(r => r.interest),    backgroundColor: "#1E40AF", stack: "inc" },
+          { type: "line", label: "Market P&L", data: cf.rows.map(r => r.market_pnl),  borderColor: "#92400E", backgroundColor: "rgba(146,64,14,0.10)", borderWidth: 1.6, pointRadius: 2, tension: 0.1, fill: false },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: "bottom", labels: { boxWidth: 10, boxHeight: 10, padding: 10 } },
+          tooltip: { backgroundColor: "#0F0F0E", titleColor: "#FAFAF9", bodyColor: "#FAFAF9", padding: 8, cornerRadius: 4 } },
+        scales: {
+          x: { stacked: true, grid: { display: false } },
+          y: { stacked: false, grid: { color: "#EDEDEA" }, ticks: { callback: v => fmtMoney(v, ccy).replace(/\.\d+/, "") } },
+        },
+      },
+    });
+  }
+  function classOf(v) { return v == null ? "" : (v > 0 ? "text-pos" : (v < 0 ? "text-neg" : "")); }
+
+  // ─────────────────────────────────────────── Compare chart
+  function getSelected() {
+    return Array.from(document.querySelectorAll(".series-toggle:checked")).map(c => c.value);
+  }
+  async function loadCompare() {
+    const series = getSelected();
+    const ccy = document.getElementById("currency-select").value;
+    if (!series.length) {
+      if (compareChart) { compareChart.destroy(); compareChart = null; }
+      return;
+    }
+    const params = new URLSearchParams();
+    series.forEach(s => params.append("series", s));
+    params.set("currency", ccy);
+    params.set("period", activePeriod);
+    params.set("rebase", activeRebase ? "1" : "0");
+    const res = await fetch("/api/series?" + params).then(r => r.json());
+    const datasets = res.series.map((s, i) => {
+      const color = PALETTE[i % PALETTE.length];
+      return {
+        label: s.name + (res.rebase ? "" : ` · ${s.currency || ""}`),
+        data: s.points.map(p => ({ x: p.x, y: p.y })),
+        borderColor: color, backgroundColor: color + "20",
+        borderWidth: 1.7, pointRadius: 0, pointHoverRadius: 4, tension: 0.15, fill: false,
+      };
+    });
+    if (compareChart) compareChart.destroy();
+    const ctx = document.getElementById("compare-chart").getContext("2d");
+    compareChart = new Chart(ctx, {
+      type: "line",
+      data: { datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false, parsing: false,
+        interaction: { mode: "nearest", intersect: false, axis: "x" },
+        plugins: { legend: { position: "bottom", labels: { boxWidth: 10, boxHeight: 10, padding: 12 } },
+          tooltip: { backgroundColor: "#0F0F0E", titleColor: "#FAFAF9", bodyColor: "#FAFAF9", padding: 8, cornerRadius: 4 } },
+        scales: commonOpts(ccy),
+      },
+    });
+    document.getElementById("compare-subtitle").textContent =
+      `${activePeriod.toUpperCase()} · ${res.currency}` + (res.errors.length ? ` · ${res.errors.length} issues` : "");
+  }
+
+  // ─────────────────────────────────────────── wire-up
+  document.querySelectorAll("#period-chips button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#period-chips button").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      activePeriod = btn.dataset.period;
+      loadHeadline(); loadCompare();
+    });
+  });
+  document.querySelectorAll("#mode-toggle button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#mode-toggle button").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      activeRebase = btn.dataset.rebase === "1";
+      loadCompare();
+    });
+  });
+  document.getElementById("currency-select").addEventListener("change", () => { loadHeadline(); loadCompare(); });
+  document.getElementById("benchmark-select").addEventListener("change", loadHeadline);
+  document.getElementById("rf-input").addEventListener("change", loadHeadline);
+  document.querySelectorAll(".series-toggle").forEach(cb => cb.addEventListener("change", loadCompare));
+
+  loadHeadline();
+  loadCompare();
+})();
+
+function jumpDiff(e) {
+  e.preventDefault();
+  const f = document.getElementById("diff-from").value;
+  const t = document.getElementById("diff-to").value;
+  if (f && t) window.location.href = `/snapshots/${f}/diff/${t}`;
+  return false;
+}
+</script>
+{% endblock %}
