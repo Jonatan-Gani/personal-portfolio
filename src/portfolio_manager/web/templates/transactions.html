@@ -59,12 +59,11 @@
         </label>
 
         <label class="field" id="tx-symbol-field">Symbol
-          <input name="symbol" id="tx-symbol" list="known-symbols" placeholder="e.g. AAPL" autocomplete="off">
-          <span class="hint">For a known position, picking the symbol auto-fills the rest.</span>
+          <input name="symbol" id="tx-symbol" placeholder="e.g. AAPL" autocomplete="off">
         </label>
 
         <label class="field" id="tx-name-field">Name
-          <input name="name" id="tx-name" list="known-names" placeholder="e.g. Apple Inc. / Chase Checking" autocomplete="off">
+          <input name="name" id="tx-name" placeholder="e.g. Apple Inc. / Chase Checking" autocomplete="off">
         </label>
 
         <label class="field">Account
@@ -91,7 +90,6 @@
 
         <label class="field" data-show="all">Currency
           <input name="currency" id="tx-currency" maxlength="3" list="ccy-list" placeholder="USD, EUR, …">
-          <span class="hint">Auto-filled when the position already exists.</span>
         </label>
 
         <label class="field" data-show="buy,sell,deposit,withdraw,dividend,interest,repayment">Fees
@@ -110,18 +108,6 @@
 
         <button class="btn btn-primary span-4" style="justify-self:start" id="tx-submit">Save transaction</button>
       </div>
-
-      <!-- Autocomplete sources for existing positions. The form does not require
-           that the user pick one of these: typing a brand-new symbol/name will
-           create the position on submit. -->
-      <datalist id="known-symbols">
-        {% for a in assets %}{% if a.symbol %}<option value="{{ a.symbol }}" data-name="{{ a.name }}" data-currency="{{ a.currency }}" data-account="{{ a.account_id or '' }}">{{ a.name }}</option>{% endif %}{% endfor %}
-      </datalist>
-      <datalist id="known-names">
-        {% for a in assets %}<option value="{{ a.name }}" data-symbol="{{ a.symbol or '' }}" data-currency="{{ a.currency }}" data-account="{{ a.account_id or '' }}" data-kind="asset">{% if a.symbol %}{{ a.symbol }} · {% endif %}{{ a.currency }}</option>{% endfor %}
-        {% for ca in cash_accounts %}<option value="{{ ca.account_name }}" data-currency="{{ ca.currency }}" data-account="{{ ca.account_id or '' }}" data-kind="cash">cash · {{ ca.currency }}</option>{% endfor %}
-        {% for l in liabilities %}<option value="{{ l.name }}" data-currency="{{ l.currency }}" data-account="{{ l.account_id or '' }}" data-kind="liability">liability · {{ l.currency }}</option>{% endfor %}
-      </datalist>
     </form>
   </div>
 </details>
@@ -135,9 +121,6 @@
   const KIND = document.getElementById("tx-kind");
   const SYMBOL_FIELD = document.getElementById("tx-symbol-field");
   const NAME_FIELD = document.getElementById("tx-name-field");
-  const SYMBOL = document.getElementById("tx-symbol");
-  const NAME = document.getElementById("tx-name");
-  const ACCOUNT = document.getElementById("tx-account");
   const QTY = document.getElementById("tx-qty");
   const PRICE = document.getElementById("tx-price");
   const AMOUNT = document.getElementById("tx-amount");
@@ -190,31 +173,6 @@
     }
   }
 
-  // When the user picks a known symbol or name from the datalist, auto-fill the
-  // rest of the position metadata. This makes "use existing" feel instant
-  // without forcing the user through a separate picker.
-  function lookupAndFill(source) {
-    if (source === "symbol") {
-      const v = (SYMBOL.value || "").trim().toUpperCase();
-      if (!v) return;
-      const opt = Array.from(document.getElementById("known-symbols").options).find(o => o.value.toUpperCase() === v);
-      if (opt) {
-        if (!NAME.dataset.userTouched) NAME.value = opt.dataset.name || "";
-        if (!CURRENCY.dataset.userTouched) CURRENCY.value = opt.dataset.currency || "";
-        if (!ACCOUNT.dataset.userTouched) ACCOUNT.value = opt.dataset.account || "";
-      }
-    } else if (source === "name") {
-      const v = (NAME.value || "").trim();
-      if (!v) return;
-      const opt = Array.from(document.getElementById("known-names").options).find(o => o.value === v);
-      if (opt) {
-        if (!SYMBOL.dataset.userTouched) SYMBOL.value = opt.dataset.symbol || "";
-        if (!CURRENCY.dataset.userTouched) CURRENCY.value = opt.dataset.currency || "";
-        if (!ACCOUNT.dataset.userTouched) ACCOUNT.value = opt.dataset.account || "";
-      }
-    }
-  }
-
   function recompute() {
     const t = TYPE.value;
     const q = parseFloat(QTY.value);
@@ -243,12 +201,8 @@
 
   TYPE.addEventListener("change", () => { applyTypeVisibility(); recompute(); });
   KIND.addEventListener("change", () => { applyTypeVisibility(); recompute(); });
-  SYMBOL.addEventListener("input", () => { SYMBOL.dataset.userTouched = "1"; lookupAndFill("symbol"); });
-  NAME.addEventListener("input", () => { NAME.dataset.userTouched = "1"; lookupAndFill("name"); });
-  ACCOUNT.addEventListener("change", () => { ACCOUNT.dataset.userTouched = "1"; });
   [QTY, PRICE, FEES].forEach(el => el && el.addEventListener("input", recompute));
   AMOUNT.addEventListener("input", () => { AMOUNT.dataset.userTouched = "1"; });
-  CURRENCY.addEventListener("input", () => { CURRENCY.dataset.userTouched = "1"; });
 
   applyTypeVisibility();
 })();
