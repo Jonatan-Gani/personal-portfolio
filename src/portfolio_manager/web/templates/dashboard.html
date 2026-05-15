@@ -11,7 +11,7 @@
 
 <div class="page-header">
   <div class="titles">
-    <span class="eyebrow">Dashboard</span>
+    <span class="eyebrow">Dashboard{% if scope_kind != 'all' %} · {{ scope_label }}{% endif %}</span>
     <h1>Portfolio overview</h1>
   </div>
   <div class="row-actions">
@@ -20,9 +20,30 @@
         Last updated <span class="mono">{{ summary.taken_at.strftime("%Y-%m-%d %H:%M UTC") if summary.taken_at.strftime else summary.taken_at }}</span>
       </span>
     {% endif %}
-    <a class="btn btn-sm" href="/?refresh=1" title="Take a fresh snapshot now">↻ Refresh</a>
+    <a class="btn btn-sm" href="/?refresh=1{% if scope and scope != 'all' %}&scope={{ scope }}{% endif %}" title="Take a fresh snapshot now">↻ Refresh</a>
   </div>
 </div>
+
+<form method="get" class="toolbar bare" style="margin-bottom:1rem">
+  <label class="field" style="min-width:18rem">
+    <span style="display:flex;align-items:center;gap:.4rem">
+      Scope
+      <span class="info-tip" title="Filter every chart, KPI and table below to a specific group or account. Historical snapshots are filtered by the current account assignment.">i</span>
+    </span>
+    <select name="scope" onchange="this.form.submit()">
+      <option value="all"        {% if scope == 'all' %}selected{% endif %}>All holdings</option>
+      <option value="unassigned" {% if scope == 'unassigned' %}selected{% endif %}>Unassigned</option>
+      {% if groups %}<optgroup label="Groups">
+        {% for g in groups %}<option value="group:{{ g.group_id }}" {% if scope == 'group:' ~ g.group_id %}selected{% endif %}>{{ g.name }}</option>{% endfor %}
+      </optgroup>{% endif %}
+      {% if accounts %}<optgroup label="Accounts">
+        {% for a in accounts %}<option value="account:{{ a.account_id }}" {% if scope == 'account:' ~ a.account_id %}selected{% endif %}>{{ a.name }}{% if a.broker %} · {{ a.broker }}{% endif %}</option>{% endfor %}
+      </optgroup>{% endif %}
+    </select>
+  </label>
+  {% if scope and scope != 'all' %}<a class="btn btn-ghost btn-sm" href="/">clear scope</a>{% endif %}
+  <noscript><button class="btn">Apply</button></noscript>
+</form>
 
 {% if auto_taken %}
 <div class="banner">
@@ -186,6 +207,7 @@
   const BASE_CCY = {{ base_currency | tojson }};
   const REPORTING = {{ reporting_currencies | tojson }};
   const BENCHMARKS = {{ benchmarks | map(attribute='benchmark_id') | list | tojson }};
+  const SCOPE = {{ scope | tojson }};
 
   Chart.defaults.font.family = "Inter, sans-serif";
   Chart.defaults.font.size = 11;
@@ -207,7 +229,7 @@
 
   // -------------- net worth + benchmark line
   async function loadNetWorth(ccy, benchmarkId) {
-    const params = new URLSearchParams({ currency: ccy });
+    const params = new URLSearchParams({ currency: ccy, scope: SCOPE });
     const nw = await fetch("/api/timeseries/networth?" + params).then(r => r.json());
 
     let bench = null;
@@ -298,7 +320,7 @@
   const ALLOC_KINDS = { asset_class: "asset", currency: "asset,cash", country: "asset,cash" };
 
   async function loadAllocation(dim) {
-    const params = new URLSearchParams({ dim, currency: BASE_CCY });
+    const params = new URLSearchParams({ dim, currency: BASE_CCY, scope: SCOPE });
     if (ALLOC_KINDS[dim]) params.set("kinds", ALLOC_KINDS[dim]);
     const res = await fetch("/api/allocation/latest?" + params).then(r => r.json());
 

@@ -14,31 +14,271 @@
 <details class="drawer" open>
   <summary>1 · Upload &amp; map columns</summary>
   <div class="drawer-body">
-    <form method="post" action="/import/preview" enctype="multipart/form-data">
+    <form method="post" action="/import/preview" enctype="multipart/form-data" id="import-form">
       <div class="field-row">
         <label class="field span-2">CSV file
-          <input type="file" name="file" accept=".csv,text/csv" required>
+          <input type="file" name="file" accept=".csv,text/csv" required id="csv-file">
         </label>
         <label class="field">
           <span>Has header row?</span>
-          <select name="has_header">
+          <select name="has_header" id="csv-has-header">
             <option value="on" {% if has_header %}selected{% endif %}>Yes</option>
             <option value="off" {% if has_header == False %}selected{% endif %}>No</option>
           </select>
         </label>
       </div>
 
-      <div style="margin-top:1rem">
-        <label class="field">Column mapping (JSON)
-          <textarea name="column_map" rows="4" class="mono" style="width:100%;font-size:12px;padding:.5rem;border:1px solid var(--border);border-radius:var(--radius-sm)">{{ column_map or '{"Date":"date","Type":"type","Kind":"entity_kind","ID":"entity_id","Amount":"amount","Currency":"currency","Quantity":"quantity","Price":"price","Fees":"fees","Notes":"notes"}' }}</textarea>
-          <span class="hint">Map your CSV column names → target fields. Targets: {{ fields|join(', ') if fields else 'date, type, entity_kind, entity_id, amount, currency, quantity, price, fees, notes' }}</span>
-        </label>
+      <div id="mapper-shell" style="margin-top:1rem;display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+          <strong style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-mute)">
+            Map columns
+          </strong>
+          <span class="muted" style="font-size:12px" id="mapper-status"></span>
+        </div>
+        <div id="mapper-grid" class="mapper-grid"></div>
+        <p class="muted" style="font-size:11.5px;margin-top:.75rem">
+          Required: <code>date</code> · <code>type</code> · <code>entity_kind</code> · <code>entity_id</code> · <code>amount</code> · <code>currency</code>.
+          Anything else is optional. The "ignore" option drops that CSV column.
+        </p>
       </div>
 
-      <div style="margin-top:1rem">
-        <button class="btn btn-primary">Parse &amp; preview</button>
+      <!-- Hidden field that JS fills in before submit. Editable as JSON for power users. -->
+      <details style="margin-top:.5rem">
+        <summary class="muted" style="font-size:12px;cursor:pointer">Advanced · raw JSON mapping</summary>
+        <textarea name="column_map" id="column-map" rows="4" class="mono"
+                  style="width:100%;font-size:12px;padding:.5rem;border:1px solid var(--border);border-radius:var(--radius-sm);margin-top:.5rem">{{ column_map or '' }}</textarea>
+      </details>
+
+      <div style="margin-top:1rem;display:flex;gap:.5rem;align-items:center">
+        <button class="btn btn-primary" id="mapper-submit" disabled>Parse &amp; preview</button>
+        <span class="muted" style="font-size:12px" id="mapper-help">Pick a CSV file to see your columns.</span>
       </div>
     </form>
+
+    <style>
+      .mapper-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: .5rem .75rem;
+      }
+      .mapper-cell {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: .55rem .7rem;
+        display: flex;
+        flex-direction: column;
+        gap: .25rem;
+      }
+      .mapper-cell .csv-name {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text-mute);
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .mapper-cell .csv-sample {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text-faint);
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .mapper-cell select {
+        font-size: 12.5px;
+        padding: .25rem .4rem;
+        background: var(--surface);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-family: var(--sans);
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='none' stroke='%236B6B65' stroke-width='1.5' d='M3 4.5l3 3 3-3'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.4rem center;
+        padding-right: 1.4rem;
+      }
+      .mapper-cell.mapped { border-color: var(--accent); background: var(--accent-soft); }
+      html[data-theme="dark"] .mapper-cell.mapped { background: rgba(96, 165, 250, .12); }
+    </style>
+
+    <script>
+    (function () {
+      const REQUIRED = ["date", "type", "entity_kind", "entity_id", "amount", "currency"];
+      const OPTIONAL = ["quantity", "price", "fees", "notes"];
+      const TARGETS = [...REQUIRED, ...OPTIONAL];
+
+      // Common header aliases → target field. Lower-cased, trimmed.
+      const ALIASES = {
+        date: ["date", "trade date", "transaction date", "settlement date", "posted", "posting date", "datum"],
+        type: ["type", "transaction type", "action", "activity", "operation", "kind of transaction"],
+        entity_kind: ["entity_kind", "kind", "category"],
+        entity_id: ["entity_id", "id", "asset_id", "cash_id", "liability_id", "account_id", "symbol_id"],
+        amount: ["amount", "total", "net amount", "value", "cash"],
+        currency: ["currency", "ccy", "cur", "currency code"],
+        quantity: ["quantity", "qty", "shares", "units"],
+        price: ["price", "unit price", "rate"],
+        fees: ["fees", "fee", "commission", "commissions", "charges"],
+        notes: ["notes", "note", "memo", "description", "details"],
+      };
+
+      const fileInput = document.getElementById("csv-file");
+      const headerSel = document.getElementById("csv-has-header");
+      const grid = document.getElementById("mapper-grid");
+      const shell = document.getElementById("mapper-shell");
+      const status = document.getElementById("mapper-status");
+      const help = document.getElementById("mapper-help");
+      const submit = document.getElementById("mapper-submit");
+      const columnMap = document.getElementById("column-map");
+      let currentColumns = [];  // list of {csv: csvName, target: pickedTarget, sample}
+
+      function guessTarget(csvCol) {
+        const norm = csvCol.trim().toLowerCase();
+        for (const [target, aliases] of Object.entries(ALIASES)) {
+          if (aliases.includes(norm)) return target;
+        }
+        // Heuristic: substring match
+        for (const [target, aliases] of Object.entries(ALIASES)) {
+          if (aliases.some(a => norm.includes(a) || a.includes(norm))) return target;
+        }
+        return "";
+      }
+
+      function parseCsvLine(line) {
+        // Minimal CSV parser handling quoted fields with commas/quotes.
+        const out = []; let cur = ""; let inQ = false;
+        for (let i = 0; i < line.length; i++) {
+          const ch = line[i];
+          if (inQ) {
+            if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+            else if (ch === '"') { inQ = false; }
+            else { cur += ch; }
+          } else {
+            if (ch === ',') { out.push(cur); cur = ""; }
+            else if (ch === '"' && cur === "") { inQ = true; }
+            else { cur += ch; }
+          }
+        }
+        out.push(cur);
+        return out;
+      }
+
+      function renderGrid() {
+        grid.innerHTML = "";
+        const targetsTaken = new Set(currentColumns.map(c => c.target).filter(Boolean));
+        currentColumns.forEach((col, idx) => {
+          const cell = document.createElement("div");
+          cell.className = "mapper-cell" + (col.target ? " mapped" : "");
+
+          const csvName = document.createElement("div");
+          csvName.className = "csv-name";
+          csvName.textContent = col.csv;
+          csvName.title = col.csv;
+          cell.appendChild(csvName);
+
+          const sel = document.createElement("select");
+          const optIgnore = document.createElement("option");
+          optIgnore.value = ""; optIgnore.textContent = "— ignore —";
+          sel.appendChild(optIgnore);
+          for (const t of TARGETS) {
+            const o = document.createElement("option");
+            o.value = t; o.textContent = t;
+            if (REQUIRED.includes(t)) o.textContent = t + " *";
+            if (t !== col.target && targetsTaken.has(t)) {
+              o.textContent += " (used)";
+            }
+            if (t === col.target) o.selected = true;
+            sel.appendChild(o);
+          }
+          sel.addEventListener("change", () => {
+            currentColumns[idx].target = sel.value;
+            // De-dup: if this target was already on another column, clear it there.
+            currentColumns.forEach((c, i) => {
+              if (i !== idx && c.target === sel.value) c.target = "";
+            });
+            renderGrid();
+            syncStatus();
+          });
+          cell.appendChild(sel);
+
+          if (col.sample) {
+            const s = document.createElement("div");
+            s.className = "csv-sample"; s.textContent = "e.g. " + col.sample;
+            s.title = col.sample;
+            cell.appendChild(s);
+          }
+          grid.appendChild(cell);
+        });
+      }
+
+      function syncStatus() {
+        const mapped = new Set(currentColumns.map(c => c.target).filter(Boolean));
+        const missing = REQUIRED.filter(r => !mapped.has(r));
+        const json = {};
+        for (const c of currentColumns) {
+          if (c.target) json[c.csv] = c.target;
+        }
+        columnMap.value = JSON.stringify(json, null, 2);
+
+        if (missing.length) {
+          status.innerHTML = '<span style="color:var(--neg)">Missing: <code>' + missing.join("</code>, <code>") + '</code></span>';
+          submit.disabled = true;
+          help.textContent = "Map every required field (marked *) to continue.";
+        } else {
+          status.innerHTML = '<span style="color:var(--pos)">Ready: ' + mapped.size + ' columns mapped</span>';
+          submit.disabled = false;
+          help.textContent = "Press 'Parse & preview' to see the parsed rows before committing.";
+        }
+      }
+
+      function readHeader(file) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const txt = String(reader.result || "");
+          // Find first non-empty line; second line as sample.
+          const lines = txt.split(/\r?\n/).filter(l => l.length > 0).slice(0, 5);
+          if (!lines.length) {
+            help.textContent = "File appears to be empty.";
+            shell.style.display = "none";
+            return;
+          }
+          const headers = parseCsvLine(lines[0]);
+          const sampleRow = lines.length > 1 ? parseCsvLine(lines[1]) : [];
+          const hasHeader = headerSel.value === "on";
+          currentColumns = headers.map((h, i) => {
+            const csvName = hasHeader ? h : `col_${i + 1}`;
+            return {
+              csv: csvName,
+              target: guessTarget(csvName),
+              sample: hasHeader ? (sampleRow[i] || "") : (h || ""),
+            };
+          });
+          // De-dup auto-guesses
+          const seen = new Set();
+          currentColumns.forEach(c => {
+            if (c.target && seen.has(c.target)) c.target = "";
+            else if (c.target) seen.add(c.target);
+          });
+          shell.style.display = "";
+          renderGrid();
+          syncStatus();
+        };
+        // Only need the head of the file — first 64KB is plenty for the header.
+        reader.readAsText(file.slice(0, 65536));
+      }
+
+      fileInput.addEventListener("change", () => {
+        if (fileInput.files && fileInput.files[0]) {
+          readHeader(fileInput.files[0]);
+        }
+      });
+      headerSel.addEventListener("change", () => {
+        if (fileInput.files && fileInput.files[0]) readHeader(fileInput.files[0]);
+      });
+    })();
+    </script>
 
     <details class="section" style="margin-top:1.5rem">
       <summary class="muted" style="font-size:13px;cursor:pointer">Reference: entity IDs in this portfolio</summary>
