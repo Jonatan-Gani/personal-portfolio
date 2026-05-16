@@ -13,6 +13,7 @@ Works the same on Linux, macOS and Windows.
 """
 from __future__ import annotations
 
+import contextlib
 import os
 import shutil
 import subprocess
@@ -97,10 +98,8 @@ def main() -> int:
     _run([python, "-m", "portfolio_manager.cli", "init-db"])
 
     print("\nStarting web app at http://localhost:8000  —  Ctrl+C to stop\n")
-    try:
+    with contextlib.suppress(KeyboardInterrupt):
         subprocess.call([python, "-m", "portfolio_manager.cli", "web"], cwd=ROOT)
-    except KeyboardInterrupt:
-        pass
     return 0
 
 
