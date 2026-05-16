@@ -7,79 +7,47 @@ locally in DuckDB.
 
 ## Quick start
 
-### macOS / Linux
+One command — works on Linux, macOS and Windows:
+
+```bash
+python start.py
+```
+
+`start.py` is idempotent: it creates the `.venv`, installs dependencies,
+copies `config/config.yaml` and `.env` from their examples, applies database
+migrations, then launches the web app at <http://localhost:8000>. Re-running
+it skips whatever is already done, so it doubles as the everyday "run" command.
+
+Flags:
+
+```bash
+python start.py --ibkr       # also install the Interactive Brokers extra
+python start.py --reinstall  # force a dependency reinstall (after a git pull)
+python start.py --no-venv    # install into the current Python, skip .venv —
+                             # use if your environment blocks .venv executables
+```
+
+On Windows use `py start.py` if `python` is not on `PATH`.
+
+### Manual setup
+
+If you would rather run the steps yourself:
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate            # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 
-cp config/config.example.yaml config/config.yaml
-cp .env.example .env
+cp config/config.example.yaml config/config.yaml   # Windows: copy
+cp .env.example .env                                # Windows: copy
 
 portfolio init-db
 portfolio web      # http://localhost:8000
 ```
 
-### Windows (cmd.exe)
-
-If your environment blocks `.bat` files (so `activate.bat` is off-limits),
-skip activation entirely and call the venv's tools by their full path
-inside `.venv\Scripts\`:
-
-```bat
-py -3 -m venv .venv
-.venv\Scripts\python.exe -m pip install -e ".[dev]"
-
-copy config\config.example.yaml config\config.yaml
-copy .env.example .env
-
-.venv\Scripts\portfolio.exe init-db
-.venv\Scripts\portfolio.exe web
-```
-
-If `.bat` activation *is* allowed, the short form works too — run
-`.venv\Scripts\activate.bat` once, then just `portfolio init-db` /
-`portfolio web` for the rest of the session.
-
-#### Windows with AppLocker / "blocked by group policy"
-
-Some corporate machines block executing any `.exe` from user-writable
-folders (Downloads, Desktop, the venv's `Scripts\` directory). In that
-case skip the venv entirely and use the system `py.exe` launcher
-(`C:\Windows\py.exe` is trusted). Install into your user site-packages
-and run the CLI as a module:
-
-```bat
-py -3 -m pip install --user -e ".[dev]"
-
-copy config\config.example.yaml config\config.yaml
-copy .env.example .env
-
-py -3 -m portfolio_manager.cli init-db
-py -3 -m portfolio_manager.cli web
-```
-
-If `py -3` is also unavailable, ask IT to add `py.exe` or your project
-folder to the AppLocker allow-list — there is no further user-mode
-workaround.
-
-### Windows (PowerShell)
-
-```powershell
-py -3 -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
-
-Copy-Item config\config.example.yaml config\config.yaml
-Copy-Item .env.example .env
-
-portfolio init-db
-portfolio web
-```
-
-If PowerShell blocks the activation script, allow it for the current user once:
-`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+On a locked-down Windows box where `.venv\Scripts\*.exe` is blocked, use
+`python start.py --no-venv`, or run the CLI through the trusted launcher:
+`py -3 -m pip install --user -e ".[dev]"` then `py -3 -m portfolio_manager.cli web`.
 
 CLI ops:
 
