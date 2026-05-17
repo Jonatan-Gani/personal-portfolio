@@ -22,21 +22,23 @@ current state:
 - **Transaction-time FX capture** — every transaction pins `fx_rate_to_base`,
   the rate at its inception.
 - **`start.py`** — one-command cross-platform setup + run.
+- **Example portfolio** — one-click demo-data seed on the Settings page.
+- **Lookup-assisted entry** — the transaction form's "Look up" button fills
+  name and currency from `AssetLookupService`.
+- **Offline dashboard charts** — chart libraries vendored locally by `start.py`,
+  with a CDN fallback.
+- **Currency-attributed returns** — cost basis in the base currency from pinned
+  FX rates, and an unrealized-return split into price effect vs FX effect, shown
+  on the Holdings page.
 
 ---
 
 ## 1. Onboarding & data entry
 
-- **Example portfolio** — a one-click "load demo data" that seeds a realistic
-  multi-currency portfolio (accounts, transactions, a few months of snapshots)
-  so a new user immediately sees a populated app instead of empty pages.
 - **Position builder** — a guided wizard for standing up an initial portfolio:
   pick accounts, add holdings with current quantity + average cost, and have it
   emit the right `opening_balance` transactions behind the scenes. Lowers the
   barrier for users who don't want to back-enter years of trades.
-- **Lookup-assisted entry** — wire `AssetLookupService` into the transaction
-  form: type a ticker or ISIN, get name / currency / exchange / classification
-  pre-filled from OpenFIGI + EDGAR.
 - **Broker-specific CSV import templates** — recognise Schwab / Fidelity /
   Trading 212 / IBKR Flex export formats and map them automatically, instead of
   the current generic column mapping.
@@ -61,10 +63,9 @@ current state:
 
 ## 3. Analytics & reporting
 
-- **Currency-attributed returns** — now that each transaction pins its inception
-  FX rate, split a position's return into the price move vs the FX move, and
-  report cost basis in any reporting currency at the rate that was true when
-  each lot was bought. This is the natural payoff of the FX-capture work.
+- **Per-reporting-currency cost basis** — currency attribution currently works in
+  the base currency. Extend it to other reporting currencies by pinning their
+  rates per transaction too, or by chaining historical base→ccy rates.
 - **Risk metrics** — volatility, Sharpe, Sortino, max drawdown, value-at-risk.
 - **Benchmark depth** — multiple benchmarks at once, alpha / beta / tracking
   error, not just a single comparison line.
@@ -74,8 +75,7 @@ current state:
   exportable.
 - **Income projection** — a forward 12-month dividend/interest estimate and a
   dividend calendar.
-- **Charts** — net-worth-over-time, allocation donuts, drawdown curve, return
-  curves. Currently the data exists but the UI is table-heavy.
+- **More chart types** — drawdown curve, return curves, allocation history.
 - **Correlation / diversification score** — how concentrated the portfolio is.
 
 ## 4. Pricing & data quality
@@ -140,12 +140,13 @@ current state:
 ## Suggested next slice
 
 If picking a handful to do next, these give the most value for the least
-architectural risk and build directly on what just landed:
+architectural risk and build on what just landed:
 
-1. **Currency-attributed returns** — consume the new per-transaction FX rate;
-   turns the Performance page into something genuinely accurate.
-2. **Lookup-assisted entry** — wire `AssetLookupService` into the transaction
-   form; the service is built, it just is not connected to the main form yet.
-3. **Example portfolio** — trivial to seed, makes the app demo-able instantly.
-4. **Position builder** — directly addresses the biggest onboarding friction.
-5. **Charts on the dashboard** — the snapshot data is already structured for it.
+1. **Position builder** — directly addresses the biggest remaining onboarding
+   friction; the example portfolio shows the target end state.
+2. **Inline transaction editing** — the update endpoint exists but has no UI.
+3. **Cost-basis lots in the UI** — the FIFO lots and per-lot P&L are already
+   computed; surface them next to the new return-attribution table.
+4. **Risk metrics** — volatility, Sharpe, drawdown on the Performance page.
+5. **FX backfill** — a `portfolio backfill-fx` command so currency attribution
+   covers transactions recorded before FX capture.
