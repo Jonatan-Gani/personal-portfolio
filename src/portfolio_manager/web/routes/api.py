@@ -603,3 +603,42 @@ def holdings_positions(request: Request, currency: str | None = None):
         })
     out.sort(key=lambda r: r["current_value_report"], reverse=True)
     return {"currency": ccy, "snapshot_id": snap_id, "rows": out}
+
+
+# ──────────────────────────────────────────────────────────── /api/holdings/lots
+@router.get("/holdings/lots/{asset_id}")
+def holdings_lots(request: Request, asset_id: str):
+    """Open FIFO lots and realized-sale events for one asset — the cost-basis
+    detail behind the holdings/attribution figures."""
+    c = request.app.state.container
+    cb = c.cost_basis.compute(asset_id)
+    return {
+        "asset_id": asset_id,
+        "realized_pnl": cb.realized_pnl,
+        "open_lots": [
+            {
+                "acquired": lot.acquired.isoformat(),
+                "qty": lot.qty,
+                "unit_cost": lot.unit_cost,
+                "cost_known": lot.cost_known,
+                "cost_local": lot.qty * lot.unit_cost,
+                "fx_to_base": lot.fx_to_base,
+                "cost_base": (
+                    lot.qty * lot.unit_cost * lot.fx_to_base
+                    if lot.fx_to_base is not None else None
+                ),
+            }
+            for lot in cb.open_lots
+        ],
+        "realized_events": [
+            {
+                "sold_at": ev.sold_at.isoformat(),
+                "qty": ev.qty,
+                "proceeds": ev.proceeds,
+                "cost_basis_consumed": ev.cost_basis_consumed,
+                "fees": ev.fees,
+                "pnl": ev.pnl,
+            }
+            for ev in cb.realized_events
+        ],
+    }

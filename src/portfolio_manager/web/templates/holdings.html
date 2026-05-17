@@ -223,7 +223,7 @@
 <section class="card section" id="attribution-card">
   <div class="card-header">
     <h3>Return attribution</h3>
-    <span class="info-tip" title="Unrealized return split into the asset's price move and the currency move, in {{ base_currency }}. Cost basis uses the FX rate pinned when each lot was bought.">i</span>
+    <span class="info-tip" title="Unrealized return split into the asset's price move and the currency move, in {{ base_currency }}. Cost basis uses the FX rate pinned when each lot was bought. Click a row to see its FIFO lots.">i</span>
   </div>
   <div class="card-body flush">
     <table class="data" id="attribution-table">
@@ -251,6 +251,66 @@
     const cls = n < 0 ? ' style="color:var(--neg)"' : (n > 0 ? ' style="color:var(--pos,#2a7)"' : '');
     return `<span${cls}>${n > 0 ? "+" : ""}${fmt(n)}</span>`;
   };
+  const fmt4 = n => (n == null) ? "—" : n.toLocaleString(undefined, {maximumFractionDigits: 4});
+
+  // Click a row to drill into its FIFO lots and realized sales.
+  function toggleLots(tr) {
+    const id = tr.dataset.asset;
+    const ccy = tr.dataset.ccy || "";
+    const detail = document.getElementById("lots-" + id);
+    const toggle = tr.querySelector(".tree-toggle");
+    if (!detail.hidden) {
+      detail.hidden = true;
+      toggle.textContent = "▸";
+      return;
+    }
+    detail.hidden = false;
+    toggle.textContent = "▾";
+    if (detail.dataset.loaded) return;
+    detail.dataset.loaded = "1";
+    const cell = detail.firstElementChild;
+    cell.innerHTML = '<span class="faint">Loading lots…</span>';
+    fetch("/api/holdings/lots/" + encodeURIComponent(id))
+      .then(r => r.json())
+      .then(d => {
+        const lots = d.open_lots || [];
+        let html = "";
+        if (lots.length) {
+          html += `<div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-mute);margin:.25rem 0">Open lots (FIFO)</div>`;
+          html += '<table class="data" style="margin:0 0 .5rem"><thead><tr>'
+            + `<th>Acquired</th><th class="num">Qty</th><th class="num">Unit cost (${ccy})</th>`
+            + `<th class="num">Cost (${ccy})</th><th class="num">Cost (${BASE})</th></tr></thead><tbody>`;
+          html += lots.map(l => `<tr>
+            <td class="mono">${l.acquired}</td>
+            <td class="num">${fmt4(l.qty)}</td>
+            <td class="num">${l.cost_known ? fmt4(l.unit_cost) : '<span class="faint">unknown</span>'}</td>
+            <td class="num">${fmt(l.cost_local)}</td>
+            <td class="num">${l.cost_base == null ? '<span class="faint">—</span>' : fmt(l.cost_base)}</td>
+          </tr>`).join("");
+          html += "</tbody></table>";
+        } else {
+          html += '<div class="faint">No open lots.</div>';
+        }
+        const ev = d.realized_events || [];
+        if (ev.length) {
+          html += `<div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-mute);margin:.25rem 0">Realized sales · total P&L ${signed(d.realized_pnl)} ${ccy}</div>`;
+          html += '<table class="data" style="margin:0"><thead><tr>'
+            + `<th>Sold</th><th class="num">Qty</th><th class="num">Proceeds</th>`
+            + `<th class="num">Cost consumed</th><th class="num">P&L</th></tr></thead><tbody>`;
+          html += ev.map(e => `<tr>
+            <td class="mono">${e.sold_at}</td>
+            <td class="num">${fmt4(e.qty)}</td>
+            <td class="num">${fmt(e.proceeds)}</td>
+            <td class="num">${fmt(e.cost_basis_consumed)}</td>
+            <td class="num">${signed(e.pnl)}</td>
+          </tr>`).join("");
+          html += "</tbody></table>";
+        }
+        cell.innerHTML = html;
+      })
+      .catch(() => { cell.innerHTML = '<span class="faint">Could not load lots.</span>'; });
+  }
+
   fetch("/api/holdings/positions?currency=" + encodeURIComponent(BASE))
     .then(r => r.json())
     .then(data => {
@@ -260,14 +320,18 @@
         return;
       }
       tbody.innerHTML = rows.map(r => `
-        <tr>
-          <td><strong>${r.symbol || r.name || r.asset_id.slice(0,8)}</strong>
+        <tr class="attr-row" data-asset="${r.asset_id}" data-ccy="${r.currency || ''}" style="cursor:pointer">
+          <td><span class="tree-toggle">▸</span><strong>${r.symbol || r.name || r.asset_id.slice(0,8)}</strong>
             ${r.incomplete_fx ? ' <span class="faint" title="some lots have no pinned FX rate">⚠</span>' : ''}</td>
           <td class="num">${fmt(r.cost_basis_base)}</td>
           <td class="num">${signed(r.unrealized_base)}</td>
           <td class="num">${signed(r.price_effect_base)}</td>
           <td class="num">${signed(r.fx_effect_base)}</td>
-        </tr>`).join("");
+        </tr>
+        <tr class="attr-detail" id="lots-${r.asset_id}" hidden><td colspan="5"></td></tr>`).join("");
+      tbody.querySelectorAll(".attr-row").forEach(tr => {
+        tr.addEventListener("click", () => toggleLots(tr));
+      });
     })
     .catch(() => {
       tbody.innerHTML = '<tr><td colspan="5" class="table-empty">Could not load attribution.</td></tr>';
