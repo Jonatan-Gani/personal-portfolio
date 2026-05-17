@@ -277,3 +277,29 @@ def test_stamped_rate_survives_repo_round_trip(services):
     got = tx_repo.get(tx.transaction_id)
     assert got.fx_rate_to_base == pytest.approx(tx.fx_rate_to_base)
     assert got.fx_base_currency == "USD"
+
+
+# =========================================================== Example portfolio
+
+def test_seed_example_portfolio(db):
+    from portfolio_manager.config import AppConfig, ProviderSpec, ProvidersConfig
+    from portfolio_manager.services.example_data import (
+        portfolio_is_empty, seed_example_portfolio,
+    )
+    from portfolio_manager.web.deps import build_container
+
+    cfg = AppConfig(providers=ProvidersConfig(
+        fx=ProviderSpec(name="mock"), price=ProviderSpec(name="mock")))
+    c = build_container(cfg, db)
+
+    assert portfolio_is_empty(c) is True
+    res = seed_example_portfolio(c)
+    assert res["transactions"] == 15
+    assert portfolio_is_empty(c) is False
+
+    holdings = c.holdings.at()
+    assert sum(holdings.asset_quantities.values()) > 0
+    assert sum(holdings.cash_balances.values()) > 0
+    # Every seeded transaction is FX-stamped.
+    txs = c.transactions_repo.list_recent(limit=100)
+    assert txs and all(t.fx_rate_to_base is not None for t in txs)

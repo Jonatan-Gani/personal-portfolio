@@ -243,6 +243,24 @@
             </table>
           </div>
         </div>
+
+        <div style="margin-top:1.5rem;border-top:1px solid var(--border);padding-top:1.25rem">
+          <h4 style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-mute);margin:0 0 .5rem">Example portfolio</h4>
+          {% if portfolio_empty %}
+          <p class="muted" style="font-size:12.5px;line-height:1.6;margin:0 0 .75rem">
+            Load a demo household — accounts, equity/ETF holdings, cash, a mortgage, and ~8 months of
+            transaction history — to explore the app with realistic data.
+          </p>
+          <form method="post" action="/settings/seed-example"
+                onsubmit="return confirm('Load the example portfolio into this database?')">
+            <button class="btn btn-primary">Load example portfolio</button>
+          </form>
+          {% else %}
+          <p class="muted" style="font-size:12.5px;line-height:1.6;margin:0">
+            The example portfolio can only be loaded into an empty database — this one already has data.
+          </p>
+          {% endif %}
+        </div>
       </div>
     </section>
 
