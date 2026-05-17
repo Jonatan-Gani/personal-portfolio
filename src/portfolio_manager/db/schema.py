@@ -438,5 +438,36 @@ MIGRATIONS: list[tuple[int, str]] = [
         ALTER TABLE transactions ADD COLUMN IF NOT EXISTS fx_base_currency VARCHAR;
         """,
     ),
+    (
+        9,
+        """
+        -- Permanent end-of-day price history — distinct from the short-lived
+        -- quote cache. The app accumulates rows here every run and via backfill,
+        -- so any holding can be valued on any past date. `kind` separates asset
+        -- prices from index levels.
+        CREATE TABLE IF NOT EXISTS price_history (
+            symbol      VARCHAR NOT NULL,
+            price_date  DATE    NOT NULL,
+            price       DOUBLE  NOT NULL,
+            currency    VARCHAR NOT NULL,
+            kind        VARCHAR NOT NULL DEFAULT 'asset',   -- 'asset' | 'index'
+            source      VARCHAR,
+            recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (symbol, price_date)
+        );
+        CREATE INDEX IF NOT EXISTS idx_price_history_date ON price_history(price_date);
+
+        -- Market / sector index levels frozen at transaction inception, so a
+        -- transaction's return can be split from currency, market and sector
+        -- without needing historical index data later.
+        ALTER TABLE transactions ADD COLUMN IF NOT EXISTS market_index_level DOUBLE;
+        ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sector_index_level DOUBLE;
+
+        -- Which indices an asset's return is measured against.
+        ALTER TABLE assets ADD COLUMN IF NOT EXISTS market_index_symbol VARCHAR;
+        ALTER TABLE assets ADD COLUMN IF NOT EXISTS sector_index_symbol VARCHAR;
+        """,
+    ),
 ]
+
 

@@ -20,6 +20,7 @@ from ..repositories import (
     TargetAllocationRepository,
     TransactionRepository,
 )
+from ..repositories.price_history import PriceHistoryStore, build_price_history_store
 from ..services import (
     AccrualService,
     AssetLookupService,
@@ -35,8 +36,8 @@ from ..services import (
     PortfolioService,
     ReturnsService,
     RiskService,
-    SnapshotService,
     SnapshotDiffService,
+    SnapshotService,
 )
 
 
@@ -69,6 +70,7 @@ class Container:
     account_groups_repo: AccountGroupRepository
     app_settings_repo: AppSettingsRepository
     price_cache: PriceCache
+    price_history: PriceHistoryStore
 
 
 def build_container(config: AppConfig, db: Database) -> Container:
@@ -88,6 +90,7 @@ def build_container(config: AppConfig, db: Database) -> Container:
     app_settings_repo = AppSettingsRepository(db)
     fx_cache = FXRateCache(db)
     price_cache = PriceCache(db)
+    price_history = build_price_history_store(config.history.backend, db)
 
     fx_ttl = int(config.providers.fx.options.get("cache_ttl_hours", 12))
     fx_service = FXService(provider=fx_provider, cache=fx_cache, cache_ttl_hours=fx_ttl)
@@ -154,4 +157,5 @@ def build_container(config: AppConfig, db: Database) -> Container:
         account_groups_repo=account_groups_repo,
         app_settings_repo=app_settings_repo,
         price_cache=price_cache,
+        price_history=price_history,
     )

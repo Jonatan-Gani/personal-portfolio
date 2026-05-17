@@ -44,6 +44,12 @@ class AutoSnapshotConfig(BaseModel):
     backfill_benchmarks_on_seed: bool = True
 
 
+class HistoryConfig(BaseModel):
+    # Which PriceHistoryStore backend to use. "duckdb" keeps end-of-day prices
+    # in the local database; a custom backend can be registered and named here.
+    backend: str = "duckdb"
+
+
 class AppConfig(BaseModel):
     database: DatabaseConfig = DatabaseConfig()
     logging: LoggingConfig = LoggingConfig()
@@ -51,6 +57,7 @@ class AppConfig(BaseModel):
     providers: ProvidersConfig = ProvidersConfig()
     web: WebConfig = WebConfig()
     auto_snapshot: AutoSnapshotConfig = AutoSnapshotConfig()
+    history: HistoryConfig = HistoryConfig()
 
 
 class _EnvSettings(BaseSettings):
