@@ -19,6 +19,9 @@ data/
 # Local config (currencies, provider tweaks). config.example.yaml is the template.
 config/config.yaml
 
+# Vendored chart libraries — downloaded by start.py, not source.
+src/portfolio_manager/web/static/vendor/
+
 # OS
 .DS_Store
 Thumbs.db

@@ -18,11 +18,25 @@ import os
 import shutil
 import subprocess
 import sys
+import urllib.request
 import venv
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 VENV = ROOT / ".venv"
+_VENDOR_DIR = ROOT / "src" / "portfolio_manager" / "web" / "static" / "vendor"
+
+# Dashboard chart libraries, vendored locally so charts work offline. If a
+# download fails the dashboard falls back to the CDN when online.
+_VENDOR_ASSETS = {
+    "chart.umd.min.js":
+        "https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js",
+    "date-fns.min.js":
+        "https://cdn.jsdelivr.net/npm/date-fns@3.6.0/cdn.min.js",
+    "chartjs-adapter-date-fns.bundle.min.js":
+        "https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/"
+        "dist/chartjs-adapter-date-fns.bundle.min.js",
+}
 
 
 def _venv_python() -> Path:
@@ -72,6 +86,24 @@ def _ensure_file(target: str, example: str) -> None:
     shutil.copyfile(ex, tgt)
 
 
+def _ensure_chart_assets() -> None:
+    """Vendor the dashboard chart libraries into web/static/vendor/ so the
+    charts work without internet. Best-effort: a failed download is not fatal —
+    the dashboard falls back to the CDN when a connection is available."""
+    _VENDOR_DIR.mkdir(parents=True, exist_ok=True)
+    for name, url in _VENDOR_ASSETS.items():
+        dest = _VENDOR_DIR / name
+        if dest.exists() and dest.stat().st_size > 0:
+            continue
+        try:
+            print(f"Fetching chart library {name} ...")
+            with urllib.request.urlopen(url, timeout=30) as resp:
+                dest.write_bytes(resp.read())
+        except Exception as e:
+            print(f"  note: could not fetch {name} ({e}) — "
+                  "charts will use the CDN while online.")
+
+
 def main() -> int:
     args = set(sys.argv[1:])
     unknown = args - {"--ibkr", "--reinstall", "--no-venv"}
@@ -95,6 +127,7 @@ def main() -> int:
     )
     _ensure_file("config/config.yaml", "config/config.example.yaml")
     _ensure_file(".env", ".env.example")
+    _ensure_chart_assets()
     _run([python, "-m", "portfolio_manager.cli", "init-db"])
 
     print("\nStarting web app at http://localhost:8000  —  Ctrl+C to stop\n")
