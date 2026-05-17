@@ -89,6 +89,10 @@ Because of this, recording a transaction is all you ever need to do — if the p
 yet, it is created from what you typed. Correcting a transaction from years ago automatically flows
 through every later calculation, while past snapshots stay frozen as the historical record.
 
+Each transaction also **pins the FX rate at its inception** (`fx_rate_to_base`) — the rate to convert
+its currency into the base currency on its date. Cost basis and returns are therefore measured
+against the rate that was true when the trade happened, not today's rate.
+
 ### Snapshots
 
 `SnapshotService.take()` reads current holdings, resolves a price for each one (a provider quote may
@@ -225,6 +229,21 @@ providers:
 
 Asset symbols are bare tickers (`AAPL`) or `TICKER:EXCHANGE:CURRENCY` (`VOD:LSE:GBP`) for non-US
 instruments. `market_data_type: 3` (delayed) works without a paid market-data subscription.
+
+---
+
+## Asset lookup
+
+When adding an asset, the app verifies and enriches it from free financial-data sources
+(`AssetLookupService`):
+
+- **OpenFIGI** — Bloomberg's open symbology; maps an ISIN to its ticker, exchange, and security type.
+  Free; an optional `OPENFIGI_API_KEY` environment variable raises the rate limit.
+- **SEC EDGAR** — authoritative company names for US-listed tickers.
+- **yfinance** — sector, country, currency, and a best-effort ISIN for a ticker.
+
+Each source is best-effort: if one is unreachable the lookup still returns what the others produced.
+ISINs are checked structurally (ISO 6166 mod-10 checksum) before any network call.
 
 ---
 
