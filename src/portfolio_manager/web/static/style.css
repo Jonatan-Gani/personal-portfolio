@@ -43,6 +43,8 @@
   --radius-sm: 4px;
   --radius-lg: 10px;
 
+  --ribbon-h:  30px;     /* market ticker strip pinned above the topbar */
+
   --shadow-sm: 0 1px 2px rgba(15, 15, 14, 0.04);
   --shadow:    0 1px 3px rgba(15, 15, 14, 0.06), 0 1px 2px rgba(15, 15, 14, 0.04);
   --shadow-lg: 0 4px 16px rgba(15, 15, 14, 0.06), 0 2px 4px rgba(15, 15, 14, 0.04);
@@ -76,7 +78,7 @@ body {
   gap: 2rem;
   height: 56px;
   position: sticky;
-  top: 0;
+  top: var(--ribbon-h);
   z-index: 50;
 }
 
@@ -139,6 +141,62 @@ body {
   border-radius: var(--radius-sm);
   color: var(--text-soft);
   font-weight: 500;
+}
+
+/* -------------------------------------------------------------- market ribbon */
+.market-ribbon {
+  position: sticky;
+  top: 0;
+  z-index: 51;
+  height: var(--ribbon-h);
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  background: var(--surface-alt);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 11px;
+  user-select: none;
+}
+.market-ribbon-track {
+  flex: none;
+  display: flex;
+  flex-wrap: nowrap;
+  width: max-content;
+}
+.market-ribbon:hover .market-ribbon-track {
+  animation-play-state: paused;
+}
+@keyframes ribbon-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.mr-unit {
+  display: flex;
+  flex-wrap: nowrap;
+}
+.mr-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0 0.95rem;
+  white-space: nowrap;
+  border-right: 1px solid var(--border);
+}
+.mr-item .mr-lbl { color: var(--text-mute); font-weight: 500; }
+.mr-item .mr-px  { color: var(--text); font-variant-numeric: tabular-nums; }
+.mr-item .mr-chg {
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+.mr-item .mr-chg.up   { color: var(--pos); }
+.mr-item .mr-chg.down { color: var(--neg); }
+.mr-item .mr-chg.flat { color: var(--text-faint); }
+.market-ribbon .mr-msg { padding: 0 0.95rem; color: var(--text-faint); }
+
+@media (prefers-reduced-motion: reduce) {
+  .market-ribbon { overflow-x: auto; }
+  .market-ribbon-track { animation: none; }
 }
 
 /* ---------------------------------------------------------------- main */
