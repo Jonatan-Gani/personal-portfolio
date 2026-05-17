@@ -4,9 +4,10 @@ import logging
 from datetime import date
 
 from ..domain.exceptions import FXRateUnavailable
-from ..domain.models import FXRate
+from ..domain.models import FXRate, Transaction
 from ..providers.base import FXProvider
 from ..repositories.prices import FXRateCache
+from ..repositories.transactions import TransactionRepository
 
 log = logging.getLogger(__name__)
 
@@ -60,3 +61,40 @@ class FXService:
 
     def convert(self, amount: float, from_ccy: str, to_ccy: str, as_of: date | None = None) -> float:
         return amount * self.rate(from_ccy, to_ccy, as_of)
+
+    def stamp_transaction(self, tx: Transaction, base_currency: str) -> Transaction:
+        """Pin the FX rate at the transaction's inception onto the row, so cost
+        basis and returns can be measured against the rate that was true then.
+
+        Mutates and returns `tx`. Never raises: if the provider is unreachable
+        the rate is left None — capturing FX must not block recording activity.
+        """
+        base = base_currency.upper()
+        tx.fx_base_currency = base
+        try:
+            tx.fx_rate_to_base = self.rate(tx.currency, base, tx.transaction_date)
+        except FXRateUnavailable:
+            log.warning(
+                "no FX rate %s->%s at %s; transaction %s recorded without a pinned rate",
+                tx.currency, base, tx.transaction_date, tx.transaction_id,
+            )
+            tx.fx_rate_to_base = None
+        return tx
+
+
+def backfill_transaction_fx(
+    transactions: TransactionRepository,
+    fx: FXService,
+    base_currency: str,
+) -> dict:
+    """Fill `fx_rate_to_base` on transactions that lack it — rows recorded before
+    FX capture existed. Each gets the historical rate at its own date. Rows whose
+    rate cannot be resolved are left untouched. Returns counts for reporting."""
+    pending = [t for t in transactions.list_all() if t.fx_rate_to_base is None]
+    filled = 0
+    for tx in pending:
+        fx.stamp_transaction(tx, base_currency)
+        if tx.fx_rate_to_base is not None:
+            transactions.update(tx)
+            filled += 1
+    return {"pending": len(pending), "filled": filled, "skipped": len(pending) - filled}

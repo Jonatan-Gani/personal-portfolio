@@ -6,6 +6,8 @@ from pathlib import Path
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse
 
+from ...providers.registry import _FX_MODULES, _PRICE_MODULES
+
 router = APIRouter()
 
 
@@ -101,11 +103,18 @@ def settings_page(request: Request):
             "common_currencies": ["USD", "EUR", "GBP", "SEK", "ILS", "CHF", "JPY", "CAD", "AUD", "CNY"],
             "themes": ["light", "dark", "system"],
             "densities": ["comfortable", "compact"],
-            "fx_providers": ["ecb", "mock"],
-            "price_providers": ["yfinance", "mock"],
+            "fx_providers": sorted(_FX_MODULES),
+            "price_providers": sorted(_PRICE_MODULES),
             "watchlist_text": watchlist_text,
+            "portfolio_empty": _portfolio_is_empty(counts),
         },
     )
+
+
+def _portfolio_is_empty(counts: dict) -> bool:
+    """The example portfolio may only be loaded into a fresh database. A "?"
+    (count query failed) is treated as not-empty — safer not to offer seeding."""
+    return all(counts.get(t) == 0 for t in ("assets", "cash_holdings", "liabilities", "transactions"))
 
 
 def _parse_bool(v: str | None) -> bool:
@@ -201,6 +210,20 @@ def update_market_watchlist(request: Request, watchlist: str = Form("")):
             items.append({"symbol": line, "label": line})
     c.app_settings_repo.set("ui.market_watchlist", items)
     return RedirectResponse("/settings#markets", status_code=303)
+
+
+@router.post("/settings/seed-example")
+def seed_example(request: Request):
+    """Load a demo portfolio. Refuses if any data already exists."""
+    from ...services.example_data import portfolio_is_empty, seed_example_portfolio
+
+    c = request.app.state.container
+    if not portfolio_is_empty(c):
+        raise HTTPException(
+            409, "portfolio is not empty — the example data can only be loaded into a fresh database"
+        )
+    seed_example_portfolio(c)
+    return RedirectResponse("/?seeded=1", status_code=303)
 
 
 @router.get("/settings/download-backup")

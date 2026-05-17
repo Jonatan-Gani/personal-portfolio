@@ -24,20 +24,6 @@ def _parse_date(s: str | None) -> date | None:
     return date.fromisoformat(s)
 
 
-def _split_entity(entity: str) -> tuple[PositionKind, str]:
-    """Parse the legacy `<kind>:<id>` form value used by the update endpoint."""
-    if ":" not in entity:
-        raise HTTPException(400, "entity must be in the form '<kind>:<id>'")
-    kind_str, _, eid = entity.partition(":")
-    try:
-        kind = PositionKind(kind_str)
-    except ValueError as e:
-        raise HTTPException(400, f"unknown entity kind {kind_str!r}") from e
-    if not eid:
-        raise HTTPException(400, "entity id missing")
-    return kind, eid
-
-
 def _kind_from_type(ttype: TransactionType, kind_override: str | None) -> PositionKind:
     """Most transaction types determine their entity kind. Only opening_balance is
     ambiguous and needs the caller to supply one."""
@@ -270,6 +256,7 @@ def create_transaction(
         fees=fees,
         notes=notes,
     )
+    c.fx.stamp_transaction(tx, c.config.reporting.base_currency)
     c.transactions_repo.insert(tx)
     if c.config.auto_snapshot.enabled:
         c.snapshot.take(notes="auto · after transaction")
@@ -284,7 +271,6 @@ def update_transaction(
     transaction_id: str,
     transaction_date: str = Form(...),
     transaction_type: str = Form(...),
-    entity: str = Form(...),
     quantity: float | None = Form(None),
     price: float | None = Form(None),
     amount: float = Form(0.0),
@@ -292,22 +278,23 @@ def update_transaction(
     fees: float = Form(0.0),
     notes: str | None = Form(None),
 ):
+    """Edit a transaction in place. The position it belongs to is fixed — to
+    move a transaction to a different position, delete and re-record it."""
     c = request.app.state.container
     try:
         existing = c.transactions_repo.get(transaction_id)
     except NotFoundError as e:
         raise HTTPException(404, str(e)) from e
-    kind, eid = _split_entity(entity)
     existing.transaction_date = date.fromisoformat(transaction_date)
     existing.transaction_type = TransactionType(transaction_type)
-    existing.entity_kind = kind
-    existing.entity_id = eid
     existing.quantity = quantity
     existing.price = price
     existing.amount = amount
     existing.currency = currency
     existing.fees = fees
     existing.notes = notes
+    # Currency or date may have changed — re-pin the inception FX rate.
+    c.fx.stamp_transaction(existing, c.config.reporting.base_currency)
     c.transactions_repo.update(existing)
     if c.config.auto_snapshot.enabled:
         c.snapshot.take(notes="auto · after transaction edit")
@@ -321,3 +308,95 @@ def delete_transaction(request: Request, transaction_id: str):
     if c.config.auto_snapshot.enabled:
         c.snapshot.take(notes="auto · after transaction delete")
     return RedirectResponse("/transactions", status_code=303)
+
+
+# ---------------------------------------------------------------- position builder
+
+def _parse_float(s: str | None) -> float | None:
+    if s is None or str(s).strip() == "":
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+@router.get("/position-builder")
+def position_builder(request: Request):
+    c = request.app.state.container
+    return request.app.state.templates.TemplateResponse(
+        request,
+        "position_builder.html",
+        {
+            "request": request,
+            "accounts": c.accounts_repo.list_active(),
+            "today": date.today().isoformat(),
+        },
+    )
+
+
+@router.post("/position-builder")
+async def position_builder_submit(request: Request):
+    """Bulk-create holdings as opening_balance transactions. Each submitted row
+    is one position; rows with neither a symbol nor a name are skipped."""
+    c = request.app.state.container
+    form = await request.form()
+    as_of = _parse_date(form.get("as_of")) or date.today()
+    base = c.config.reporting.base_currency
+
+    kinds = form.getlist("kind")
+    symbols = form.getlist("symbol")
+    names = form.getlist("name")
+    account_ids = form.getlist("account_id")
+    quantities = form.getlist("quantity")
+    unit_costs = form.getlist("unit_cost")
+    amounts = form.getlist("amount")
+    currencies = form.getlist("currency")
+
+    def cell(seq: list, i: int) -> str:
+        return str(seq[i]).strip() if i < len(seq) and seq[i] is not None else ""
+
+    created = 0
+    for i in range(len(kinds)):
+        sym, nm = cell(symbols, i), cell(names, i)
+        if not sym and not nm:
+            continue  # blank row
+        try:
+            kind = PositionKind(cell(kinds, i))
+        except ValueError:
+            continue
+
+        ccy = cell(currencies, i).upper() or None
+        eid, entity_ccy = _resolve_or_create_entity(
+            c, kind=kind, symbol=sym or None, name=nm or None,
+            account_id=cell(account_ids, i) or None, currency=ccy,
+        )
+        ccy = ccy or entity_ccy
+
+        qty = _parse_float(cell(quantities, i))
+        cost = _parse_float(cell(unit_costs, i))
+        amt = _parse_float(cell(amounts, i))
+
+        if kind is PositionKind.ASSET:
+            if not qty:
+                continue
+            price = cost
+            amount = qty * cost if (qty and cost) else (amt or 0.0)
+        else:
+            qty = price = None
+            amount = amt or 0.0
+            if not amount:
+                continue
+
+        tx = Transaction(
+            transaction_date=as_of, transaction_type=TransactionType.OPENING_BALANCE,
+            entity_kind=kind, entity_id=eid, quantity=qty, price=price,
+            amount=amount, currency=ccy, notes="position builder",
+        )
+        c.fx.stamp_transaction(tx, base)
+        c.transactions_repo.insert(tx)
+        created += 1
+
+    if created and c.config.auto_snapshot.enabled:
+        c.snapshot.take(notes="auto · after position builder")
+    return RedirectResponse(f"/holdings?builder={created}", status_code=303)

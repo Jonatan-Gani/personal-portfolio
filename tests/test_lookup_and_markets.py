@@ -8,7 +8,11 @@ from portfolio_manager.domain.exceptions import PriceUnavailable
 from portfolio_manager.domain.models import Price
 from portfolio_manager.providers.base import PriceProvider, PriceQuote
 from portfolio_manager.repositories.prices import PriceCache
-from portfolio_manager.services.asset_lookup import AssetLookupService, is_valid_isin_format
+from portfolio_manager.services.asset_lookup import (
+    AssetLookupService,
+    is_valid_isin_format,
+    parse_openfigi_record,
+)
 from portfolio_manager.services.markets import MarketsService
 
 
@@ -42,6 +46,38 @@ def test_asset_lookup_requires_input():
     s = AssetLookupService()
     r = s.lookup()
     assert r.ok is False
+
+
+# ---------------------------------------------------------------- OpenFIGI parse
+
+def test_parse_openfigi_common_stock():
+    rec = {
+        "figi": "BBG000B9XRY4", "name": "APPLE INC", "ticker": "AAPL",
+        "exchCode": "US", "securityType": "Common Stock", "marketSector": "Equity",
+    }
+    out = parse_openfigi_record(rec)
+    assert out["symbol"] == "AAPL"
+    assert out["name"] == "APPLE INC"
+    assert out["exchange"] == "US"
+    assert out["instrument_type"] == "equity"
+    assert out["asset_class"] == "equity"
+
+
+def test_parse_openfigi_etf_and_bond():
+    etf = parse_openfigi_record({"ticker": "vwce", "securityType": "ETP", "marketSector": "Equity"})
+    assert etf["instrument_type"] == "etf"
+    assert etf["symbol"] == "VWCE"          # normalised upper-case
+
+    bond = parse_openfigi_record({"ticker": "T", "securityType": "", "marketSector": "Govt"})
+    assert bond["asset_class"] == "fixed_income"
+    assert bond["instrument_type"] == "government_bond"
+
+
+def test_openfigi_key_from_env(monkeypatch):
+    monkeypatch.setenv("OPENFIGI_API_KEY", "test-key-123")
+    assert AssetLookupService().openfigi_api_key == "test-key-123"
+    monkeypatch.delenv("OPENFIGI_API_KEY", raising=False)
+    assert AssetLookupService().openfigi_api_key is None
 
 
 # ---------------------------------------------------------------- Markets
@@ -129,14 +165,3 @@ def test_markets_watchlist_iterates_items(db):
     assert out[1].change_pct == pytest.approx(-0.01)
 
 
-# ---------------------------------------------------------------- transactions friendly form
-
-def test_transaction_route_split_entity_parser():
-    from portfolio_manager.web.routes.transactions import _split_entity
-    from portfolio_manager.domain.enums import PositionKind
-    kind, eid = _split_entity("asset:abc-123")
-    assert kind is PositionKind.ASSET and eid == "abc-123"
-    kind, eid = _split_entity("cash:c1")
-    assert kind is PositionKind.CASH
-    kind, eid = _split_entity("liability:l1")
-    assert kind is PositionKind.LIABILITY

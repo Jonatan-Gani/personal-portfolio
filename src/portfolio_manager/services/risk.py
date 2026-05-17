@@ -14,6 +14,8 @@ class RiskMetrics:
     period: str                          # 'monthly'
     annualized_volatility: float | None
     annualized_sharpe: float | None
+    annualized_sortino: float | None     # Sharpe but penalising only downside risk
+    var_95_monthly: float | None         # historical 5th-percentile monthly return
     risk_free_rate: float                # decimal APR used
     beta: float | None
     alpha_annual: float | None           # CAPM intercept, annualized
@@ -44,6 +46,7 @@ class RiskService:
             return RiskMetrics(
                 n_periods=len(port_returns), period="monthly",
                 annualized_volatility=None, annualized_sharpe=None,
+                annualized_sortino=None, var_95_monthly=None,
                 risk_free_rate=risk_free_rate,
                 beta=None, alpha_annual=None, correlation=None,
                 benchmark_id=benchmark_id, benchmark_name=None,
@@ -55,6 +58,16 @@ class RiskService:
         vol_a = vol_m * math.sqrt(12) if vol_m is not None else None
         mean_excess = sum(excess) / len(excess)
         sharpe_a = ((mean_excess * 12) / vol_a) if vol_a and vol_a > 0 else None
+
+        # Sortino: like Sharpe, but the denominator is downside deviation —
+        # only returns below the risk-free rate count as "risk".
+        downside_m = _downside_deviation(excess)
+        downside_a = downside_m * math.sqrt(12) if downside_m is not None else None
+        sortino_a = ((mean_excess * 12) / downside_a) if downside_a and downside_a > 0 else None
+
+        # Historical VaR: the 5th-percentile monthly return — a loss this size or
+        # worse happened ~5% of months over the window.
+        var95 = _percentile([r for _, r in port_returns], 0.05)
 
         beta = corr = alpha_annual = None
         bench_name = None
@@ -79,6 +92,7 @@ class RiskService:
         return RiskMetrics(
             n_periods=len(port_returns), period="monthly",
             annualized_volatility=vol_a, annualized_sharpe=sharpe_a,
+            annualized_sortino=sortino_a, var_95_monthly=var95,
             risk_free_rate=risk_free_rate,
             beta=beta, alpha_annual=alpha_annual, correlation=corr,
             benchmark_id=benchmark_id, benchmark_name=bench_name,
@@ -151,6 +165,28 @@ def _stdev(xs: list[float]) -> float | None:
     m = _mean(xs)
     var = sum((x - m) ** 2 for x in xs) / (len(xs) - 1)
     return math.sqrt(var)
+
+
+def _downside_deviation(xs: list[float]) -> float | None:
+    """Root-mean-square of the negative entries (zeros for the non-negative ones).
+    The downside analogue of standard deviation used by the Sortino ratio."""
+    if len(xs) < 2:
+        return None
+    sq = sum(min(0.0, x) ** 2 for x in xs) / len(xs)
+    return math.sqrt(sq)
+
+
+def _percentile(xs: list[float], q: float) -> float | None:
+    """Linear-interpolated q-quantile (0..1) of xs. Returns None if too few points."""
+    if len(xs) < 2:
+        return None
+    ordered = sorted(xs)
+    pos = q * (len(ordered) - 1)
+    lo = math.floor(pos)
+    hi = math.ceil(pos)
+    if lo == hi:
+        return ordered[lo]
+    return ordered[lo] + (ordered[hi] - ordered[lo]) * (pos - lo)
 
 
 def _corr(xs: list[float], ys: list[float]) -> float | None:

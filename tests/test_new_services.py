@@ -1,22 +1,38 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 import pytest
 
 from portfolio_manager.domain.enums import (
-    AssetClass, InstrumentType, LiabilityType, PositionKind, TransactionType,
+    AssetClass,
+    InstrumentType,
+    LiabilityType,
+    PositionKind,
+    TransactionType,
 )
 from portfolio_manager.domain.models import (
-    Asset, CashHolding, Liability, TargetAllocation, Transaction,
+    Asset,
+    CashHolding,
+    Liability,
+    TargetAllocation,
+    Transaction,
 )
-from portfolio_manager.repositories import LiabilityRepository, TargetAllocationRepository
+from portfolio_manager.repositories import (
+    LiabilityRepository,
+    TargetAllocationRepository,
+    TransactionRepository,
+)
 from portfolio_manager.services import (
-    AccrualService, CostBasisService, DriftService, ExposureService, IncomeService,
-    PerformanceService, RiskService, SnapshotDiffService,
+    AccrualService,
+    CostBasisService,
+    DriftService,
+    ExposureService,
+    IncomeService,
+    PerformanceService,
+    SnapshotDiffService,
 )
 from portfolio_manager.services.performance import _xirr_solve
-
 
 # ---------- helpers (copied from test_snapshot_flow style) ----------
 
@@ -231,3 +247,187 @@ def test_income_ttm_collects_dividends(services, db):
     rep = income.report("USD")
     assert rep.ttm_total_report == pytest.approx(100.0)
     assert any(r.entity_id == a.asset_id and r.payments == 2 for r in rep.rows)
+
+
+# =========================================================== Transaction FX
+
+def test_stamp_transaction_pins_inception_rate(services):
+    """A transaction in a non-base currency gets the FX rate at its date pinned."""
+    fx = services["fx"]
+    tx = Transaction(
+        transaction_date=date(2025, 1, 15),
+        transaction_type=TransactionType.BUY,
+        entity_kind=PositionKind.ASSET,
+        entity_id="x", quantity=10.0, price=100.0, amount=1000.0, currency="EUR",
+    )
+    fx.stamp_transaction(tx, "USD")
+    assert tx.fx_base_currency == "USD"
+    # MockFxProvider: 1 EUR = 1/0.92 USD
+    assert tx.fx_rate_to_base == pytest.approx(1 / 0.92, rel=1e-9)
+
+
+def test_stamp_transaction_same_currency_is_one(services):
+    fx = services["fx"]
+    tx = Transaction(
+        transaction_date=date(2025, 1, 15),
+        transaction_type=TransactionType.DEPOSIT,
+        entity_kind=PositionKind.CASH,
+        entity_id="c", amount=500.0, currency="USD",
+    )
+    fx.stamp_transaction(tx, "USD")
+    assert tx.fx_rate_to_base == 1.0
+
+
+def test_stamped_rate_survives_repo_round_trip(services):
+    fx, tx_repo = services["fx"], services["tx_repo"]
+    p = services["portfolio"]
+    a = _open_asset(p, tx_repo, name="EuroCo", symbol="EC", qty=1.0, currency="EUR")
+    tx = Transaction(
+        transaction_date=date(2025, 3, 1),
+        transaction_type=TransactionType.BUY,
+        entity_kind=PositionKind.ASSET,
+        entity_id=a.asset_id, quantity=5.0, price=20.0, amount=100.0, currency="EUR",
+    )
+    fx.stamp_transaction(tx, "USD")
+    tx_repo.insert(tx)
+    got = tx_repo.get(tx.transaction_id)
+    assert got.fx_rate_to_base == pytest.approx(tx.fx_rate_to_base)
+    assert got.fx_base_currency == "USD"
+
+
+# =========================================================== Example portfolio
+
+def test_seed_example_portfolio(db):
+    from portfolio_manager.config import AppConfig, ProvidersConfig, ProviderSpec
+    from portfolio_manager.services.example_data import (
+        portfolio_is_empty,
+        seed_example_portfolio,
+    )
+    from portfolio_manager.web.deps import build_container
+
+    cfg = AppConfig(providers=ProvidersConfig(
+        fx=ProviderSpec(name="mock"), price=ProviderSpec(name="mock")))
+    c = build_container(cfg, db)
+
+    assert portfolio_is_empty(c) is True
+    res = seed_example_portfolio(c)
+    assert res["transactions"] == 15
+    assert portfolio_is_empty(c) is False
+
+    holdings = c.holdings.at()
+    assert sum(holdings.asset_quantities.values()) > 0
+    assert sum(holdings.cash_balances.values()) > 0
+    # Every seeded transaction is FX-stamped.
+    txs = c.transactions_repo.list_recent(limit=100)
+    assert txs and all(t.fx_rate_to_base is not None for t in txs)
+
+
+# =========================================================== Currency attribution
+
+def test_cost_basis_base_uses_pinned_rates(db):
+    """Base-currency cost basis uses the FX rate pinned at each purchase."""
+    tx = TransactionRepository(db)
+    tx.insert(Transaction(
+        transaction_date=date(2025, 1, 1), transaction_type=TransactionType.BUY,
+        entity_kind=PositionKind.ASSET, entity_id="A",
+        quantity=10, price=100, amount=1000, currency="EUR",
+        fx_rate_to_base=1.10, fx_base_currency="USD"))
+    tx.insert(Transaction(
+        transaction_date=date(2025, 6, 1), transaction_type=TransactionType.BUY,
+        entity_kind=PositionKind.ASSET, entity_id="A",
+        quantity=5, price=120, amount=600, currency="EUR",
+        fx_rate_to_base=1.20, fx_base_currency="USD"))
+    r = CostBasisService(db).compute("A")
+    assert r.total_cost_basis == pytest.approx(1600.0)        # EUR
+    assert r.total_cost_basis_base == pytest.approx(1820.0)   # 1000*1.10 + 600*1.20
+    assert r.incomplete_fx is False
+
+
+def test_currency_attribution_splits_price_and_fx(db):
+    tx = TransactionRepository(db)
+    tx.insert(Transaction(
+        transaction_date=date(2025, 1, 1), transaction_type=TransactionType.BUY,
+        entity_kind=PositionKind.ASSET, entity_id="A",
+        quantity=10, price=100, amount=1000, currency="EUR",
+        fx_rate_to_base=1.10, fx_base_currency="USD"))
+    tx.insert(Transaction(
+        transaction_date=date(2025, 6, 1), transaction_type=TransactionType.BUY,
+        entity_kind=PositionKind.ASSET, entity_id="A",
+        quantity=5, price=120, amount=600, currency="EUR",
+        fx_rate_to_base=1.20, fx_base_currency="USD"))
+    attr = CostBasisService(db).attribute_currency("A", current_price=130.0, current_fx_to_base=1.30)
+    assert attr is not None
+    # price effect = 10*(130-100)*1.10 + 5*(130-120)*1.20 = 390
+    assert attr.price_effect_base == pytest.approx(390.0)
+    # the split always reconstitutes the total unrealized return
+    assert attr.price_effect_base + attr.fx_effect_base == pytest.approx(attr.unrealized_base)
+    assert attr.complete is True
+
+
+def test_currency_attribution_flags_missing_fx(db):
+    tx = TransactionRepository(db)
+    tx.insert(Transaction(
+        transaction_date=date(2025, 1, 1), transaction_type=TransactionType.BUY,
+        entity_kind=PositionKind.ASSET, entity_id="A",
+        quantity=10, price=100, amount=1000, currency="EUR"))  # no pinned FX
+    r = CostBasisService(db).compute("A")
+    assert r.incomplete_fx is True
+    attr = CostBasisService(db).attribute_currency("A", current_price=110.0, current_fx_to_base=1.10)
+    assert attr is not None and attr.complete is False
+
+
+# =========================================================== Position builder
+
+def test_position_builder_creates_opening_balances(db):
+    from fastapi.testclient import TestClient
+
+    from portfolio_manager.config import AppConfig, ProvidersConfig, ProviderSpec
+    from portfolio_manager.web.app import create_app
+
+    cfg = AppConfig(providers=ProvidersConfig(
+        fx=ProviderSpec(name="mock"), price=ProviderSpec(name="mock")))
+    cfg.auto_snapshot.enabled = False
+    cfg.database.path = str(db.path)
+    client = TestClient(create_app(cfg))
+
+    assert client.get("/position-builder").status_code == 200
+    r = client.post("/position-builder", data={
+        "as_of": "2025-01-10",
+        "kind": ["asset", "cash", "asset"],
+        "symbol": ["AAPL", "", ""],
+        "name": ["Apple Inc.", "Chase Checking", ""],   # 3rd row blank → skipped
+        "account_id": ["", "", ""],
+        "quantity": ["50", "", ""],
+        "unit_cost": ["170", "", ""],
+        "amount": ["", "25000", ""],
+        "currency": ["USD", "USD", ""],
+    }, follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/holdings?builder=2"
+
+    c = client.app.state.container
+    holdings = c.holdings.at()
+    assert list(holdings.asset_quantities.values()) == [50.0]
+    assert list(holdings.cash_balances.values()) == [25000.0]
+
+
+# =========================================================== FX backfill
+
+def test_backfill_transaction_fx(services):
+    """Transactions recorded without a pinned FX rate get one filled in."""
+    from portfolio_manager.services.fx import backfill_transaction_fx
+
+    tx = services["tx_repo"]
+    for ccy in ("EUR", "USD", "GBP"):
+        tx.insert(Transaction(
+            transaction_date=date(2025, 1, 1), transaction_type=TransactionType.BUY,
+            entity_kind=PositionKind.ASSET, entity_id="A",
+            quantity=1, price=1, amount=1, currency=ccy))
+    assert all(t.fx_rate_to_base is None for t in tx.list_all())
+
+    res = backfill_transaction_fx(tx, services["fx"], "USD")
+    assert res == {"pending": 3, "filled": 3, "skipped": 0}
+    assert all(t.fx_rate_to_base is not None for t in tx.list_all())
+
+    # Idempotent — a second run finds nothing pending.
+    assert backfill_transaction_fx(tx, services["fx"], "USD")["pending"] == 0

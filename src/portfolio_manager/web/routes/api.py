@@ -364,7 +364,7 @@ def series_endpoint(
             out_series.append(s)
         except NotFoundError as e:
             errors.append(str(e))
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             errors.append(f"{sid}: {e!s}")
 
     return {
@@ -528,7 +528,8 @@ def holdings_positions(request: Request, currency: str | None = None):
     """Per-position cost basis + unrealized + realized P&L, in report currency.
     Used by the holdings page to show a richer table than just quantity."""
     c = request.app.state.container
-    ccy = (currency or c.config.reporting.base_currency).upper()
+    base = c.config.reporting.base_currency.upper()
+    ccy = (currency or base).upper()
     latest = c.snapshots_repo.latest()
     snap_id = latest.snapshot_id if latest else None
     out = []
@@ -558,11 +559,25 @@ def holdings_positions(request: Request, currency: str | None = None):
         try:
             cost_in_report = c.fx.convert(cb.total_cost_basis, asset.currency, ccy)
             realized_in_report = c.fx.convert(cb.realized_pnl, asset.currency, ccy)
-        except Exception:  # noqa: BLE001
+        except Exception:
             cost_in_report = cb.total_cost_basis
             realized_in_report = cb.realized_pnl
         unrealized_report = cur_val_report - cost_in_report
         unrealized_pct = (unrealized_report / cost_in_report) if cost_in_report else None
+
+        # Currency attribution (always in base currency): split the unrealized
+        # return into the price move vs the FX move, using the rate pinned on
+        # each purchase rather than today's rate.
+        attribution = None
+        if cur_price_local is not None:
+            try:
+                fx_now = c.fx.rate(asset.currency, base)
+                attribution = c.cost_basis.attribute_currency(
+                    asset.asset_id, cur_price_local, fx_now
+                )
+            except Exception:
+                attribution = None
+
         out.append({
             "asset_id": asset.asset_id,
             "name": asset.name,
@@ -578,6 +593,52 @@ def holdings_positions(request: Request, currency: str | None = None):
             "unrealized_pct": unrealized_pct,
             "realized_report": realized_in_report,
             "incomplete_cost_basis": cb.incomplete_cost_basis,
+            # Base-currency figures from FX rates pinned at purchase.
+            "base_currency": base,
+            "cost_basis_base": cb.total_cost_basis_base,
+            "incomplete_fx": cb.incomplete_fx,
+            "unrealized_base": attribution.unrealized_base if attribution else None,
+            "price_effect_base": attribution.price_effect_base if attribution else None,
+            "fx_effect_base": attribution.fx_effect_base if attribution else None,
         })
     out.sort(key=lambda r: r["current_value_report"], reverse=True)
     return {"currency": ccy, "snapshot_id": snap_id, "rows": out}
+
+
+# ──────────────────────────────────────────────────────────── /api/holdings/lots
+@router.get("/holdings/lots/{asset_id}")
+def holdings_lots(request: Request, asset_id: str):
+    """Open FIFO lots and realized-sale events for one asset — the cost-basis
+    detail behind the holdings/attribution figures."""
+    c = request.app.state.container
+    cb = c.cost_basis.compute(asset_id)
+    return {
+        "asset_id": asset_id,
+        "realized_pnl": cb.realized_pnl,
+        "open_lots": [
+            {
+                "acquired": lot.acquired.isoformat(),
+                "qty": lot.qty,
+                "unit_cost": lot.unit_cost,
+                "cost_known": lot.cost_known,
+                "cost_local": lot.qty * lot.unit_cost,
+                "fx_to_base": lot.fx_to_base,
+                "cost_base": (
+                    lot.qty * lot.unit_cost * lot.fx_to_base
+                    if lot.fx_to_base is not None else None
+                ),
+            }
+            for lot in cb.open_lots
+        ],
+        "realized_events": [
+            {
+                "sold_at": ev.sold_at.isoformat(),
+                "qty": ev.qty,
+                "proceeds": ev.proceeds,
+                "cost_basis_consumed": ev.cost_basis_consumed,
+                "fees": ev.fees,
+                "pnl": ev.pnl,
+            }
+            for ev in cb.realized_events
+        ],
+    }

@@ -115,6 +115,10 @@ class Transaction(BaseModel):
     currency: CurrencyStr
     fees: float = 0.0
     notes: Optional[str] = None
+    # FX rate at transaction inception: 1 unit of `currency` in `fx_base_currency`
+    # as of `transaction_date`. None if not captured (legacy rows / provider down).
+    fx_rate_to_base: Optional[float] = None
+    fx_base_currency: Optional[CurrencyStr] = None
     created_at: datetime = Field(default_factory=utcnow)
 
 

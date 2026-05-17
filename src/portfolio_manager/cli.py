@@ -56,6 +56,24 @@ def snapshot(note: str | None = typer.Option(None, "--note", "-n")):
     )
 
 
+@app.command("backfill-fx")
+def backfill_fx():
+    """Fill FX rates on transactions recorded before FX capture existed."""
+    from .services.fx import backfill_transaction_fx
+
+    container, cfg = _container()
+    res = backfill_transaction_fx(
+        container.transactions_repo, container.fx, cfg.reporting.base_currency
+    )
+    if not res["pending"]:
+        console.print("[dim]all transactions already have a pinned FX rate[/]")
+        return
+    console.print(
+        f"[green]backfilled[/] {res['filled']} of {res['pending']} transactions"
+        + (f" · [yellow]{res['skipped']} skipped[/] (no rate available)" if res["skipped"] else "")
+    )
+
+
 @app.command("list-snapshots")
 def list_snapshots(limit: int = 25):
     container, _ = _container()

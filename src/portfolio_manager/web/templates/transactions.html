@@ -59,7 +59,11 @@
         </label>
 
         <label class="field" id="tx-symbol-field">Symbol
-          <input name="symbol" id="tx-symbol" placeholder="e.g. AAPL" autocomplete="off">
+          <span style="display:flex;gap:.4rem">
+            <input name="symbol" id="tx-symbol" placeholder="e.g. AAPL or an ISIN" autocomplete="off" style="flex:1">
+            <button type="button" class="btn btn-sm" id="tx-lookup-btn" title="Look up name & currency">Look up</button>
+          </span>
+          <span class="hint" id="tx-lookup-hint">Optional: resolve the name and currency from OpenFIGI / EDGAR.</span>
         </label>
 
         <label class="field" id="tx-name-field">Name
@@ -121,6 +125,10 @@
   const KIND = document.getElementById("tx-kind");
   const SYMBOL_FIELD = document.getElementById("tx-symbol-field");
   const NAME_FIELD = document.getElementById("tx-name-field");
+  const SYMBOL = document.getElementById("tx-symbol");
+  const NAME = document.getElementById("tx-name");
+  const LOOKUP_BTN = document.getElementById("tx-lookup-btn");
+  const LOOKUP_HINT = document.getElementById("tx-lookup-hint");
   const QTY = document.getElementById("tx-qty");
   const PRICE = document.getElementById("tx-price");
   const AMOUNT = document.getElementById("tx-amount");
@@ -198,6 +206,43 @@
       SUMMARY.textContent = "";
     }
   }
+
+  // Lookup-assisted entry: resolve the typed symbol/ISIN against the asset
+  // lookup service and fill Name + Currency. Explicit (button-driven) — it
+  // never fires on its own, and only fills fields the user left blank.
+  const _ISIN_RE = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/;
+
+  async function runLookup() {
+    const q = (SYMBOL.value || "").trim().toUpperCase();
+    if (!q) { LOOKUP_HINT.textContent = "Type a ticker or ISIN first."; return; }
+    const param = _ISIN_RE.test(q) ? "isin" : "symbol";
+    LOOKUP_BTN.disabled = true;
+    LOOKUP_HINT.textContent = "Looking up…";
+    try {
+      const resp = await fetch(`/api/asset-lookup?${param}=${encodeURIComponent(q)}`);
+      const r = await resp.json();
+      if (!r.ok) {
+        LOOKUP_HINT.textContent = r.error || "No match found.";
+        return;
+      }
+      if (r.symbol && param === "isin") SYMBOL.value = r.symbol;
+      if (r.name && !NAME.value.trim()) NAME.value = r.name;
+      if (r.currency && !CURRENCY.value.trim()) {
+        CURRENCY.value = r.currency;
+        CURRENCY.dataset.userTouched = "1";
+      }
+      const bits = [r.name, r.currency, r.exchange].filter(Boolean).join(" · ");
+      LOOKUP_HINT.innerHTML = `<span style="color:var(--pos,#2a7)">✓</span> ${bits}`
+        + (r.source ? ` <span class="faint">(${r.source})</span>` : "")
+        + (r.error ? ` <span style="color:var(--neg,#c33)">— ${r.error}</span>` : "");
+    } catch (e) {
+      LOOKUP_HINT.textContent = "Lookup failed — fill the fields manually.";
+    } finally {
+      LOOKUP_BTN.disabled = false;
+    }
+  }
+
+  LOOKUP_BTN.addEventListener("click", runLookup);
 
   TYPE.addEventListener("change", () => { applyTypeVisibility(); recompute(); });
   KIND.addEventListener("change", () => { applyTypeVisibility(); recompute(); });
@@ -281,13 +326,57 @@
         <td class="num">{{ "{:,.4f}".format(tx.quantity) if tx.quantity is not none else '—' }}</td>
         <td class="num">{{ "{:,.4f}".format(tx.price) if tx.price is not none else '—' }}</td>
         <td class="num">{{ "{:,.2f}".format(tx.amount) }}</td>
-        <td class="mono">{{ tx.currency }}</td>
+        <td class="mono">{{ tx.currency }}
+          {% if tx.fx_rate_to_base and tx.fx_base_currency and tx.currency != tx.fx_base_currency %}
+            <div class="meta faint" title="FX rate pinned at the transaction date">
+              ×{{ "{:,.4f}".format(tx.fx_rate_to_base) }} {{ tx.fx_base_currency }}
+            </div>
+          {% endif %}
+        </td>
         <td class="num faint">{{ "{:,.2f}".format(tx.fees) if tx.fees else '—' }}</td>
         <td class="muted">{{ tx.notes or '—' }}</td>
-        <td>
+        <td style="white-space:nowrap">
+          <button type="button" class="btn btn-sm tx-edit-btn" data-tx="{{ tx.transaction_id }}">Edit</button>
           <form method="post" action="/transactions/{{ tx.transaction_id }}/delete" class="inline"
                 onsubmit="return confirm('Delete this transaction? Holdings will recompute.')">
             <button class="btn btn-sm btn-danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+      <tr class="tx-edit-row" id="edit-{{ tx.transaction_id }}" hidden>
+        <td colspan="11" style="background:var(--surface-alt)">
+          <form method="post" action="/transactions/{{ tx.transaction_id }}/update" class="field-row" style="padding:.5rem">
+            <label class="field">Date
+              <input type="date" name="transaction_date" value="{{ tx.transaction_date }}" required>
+            </label>
+            <label class="field">Type
+              <select name="transaction_type">
+                {% for t in transaction_types %}<option value="{{ t }}" {% if t == tx.transaction_type.value %}selected{% endif %}>{{ t | humanize }}</option>{% endfor %}
+              </select>
+            </label>
+            <label class="field">Quantity
+              <input type="number" step="any" name="quantity" value="{{ tx.quantity if tx.quantity is not none else '' }}">
+            </label>
+            <label class="field">Price
+              <input type="number" step="any" name="price" value="{{ tx.price if tx.price is not none else '' }}">
+            </label>
+            <label class="field">Amount
+              <input type="number" step="any" name="amount" value="{{ tx.amount }}">
+            </label>
+            <label class="field">Currency
+              <input name="currency" maxlength="3" list="ccy-list" value="{{ tx.currency }}" required>
+            </label>
+            <label class="field">Fees
+              <input type="number" step="any" name="fees" value="{{ tx.fees }}">
+            </label>
+            <label class="field span-2">Notes
+              <input name="notes" value="{{ tx.notes or '' }}">
+            </label>
+            <div class="span-4" style="display:flex;gap:.5rem;align-items:center">
+              <button class="btn btn-sm btn-primary">Save changes</button>
+              <button type="button" class="btn btn-sm btn-ghost tx-edit-cancel" data-tx="{{ tx.transaction_id }}">Cancel</button>
+              <span class="hint">The position stays the same — to move this transaction, delete and re-record it.</span>
+            </div>
           </form>
         </td>
       </tr>
@@ -297,5 +386,24 @@
     </tbody>
   </table>
 </div>
+
+<script>
+// Inline editing: the Edit button reveals a per-row edit form.
+(function () {
+  function editRow(id) { return document.getElementById("edit-" + id); }
+  document.querySelectorAll(".tx-edit-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const row = editRow(btn.dataset.tx);
+      if (row) row.hidden = !row.hidden;
+    });
+  });
+  document.querySelectorAll(".tx-edit-cancel").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const row = editRow(btn.dataset.tx);
+      if (row) row.hidden = true;
+    });
+  });
+})();
+</script>
 
 {% endblock %}

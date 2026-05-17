@@ -62,6 +62,7 @@
   <div class="kpi"><div class="lbl">Money-weighted (XIRR)</div><div class="val lg" id="kpi-xirr">—</div><div class="sub" id="kpi-xirr-meta"></div></div>
   <div class="kpi"><div class="lbl">Max drawdown</div><div class="val lg text-neg" id="kpi-maxdd">—</div><div class="sub" id="kpi-maxdd-at"></div></div>
   <div class="kpi"><div class="lbl">Annualised vol</div><div class="val" id="kpi-vol">—</div><div class="sub" id="kpi-sharpe">Sharpe —</div></div>
+  <div class="kpi"><div class="lbl">Sortino</div><div class="val" id="kpi-sortino">—</div><div class="sub" id="kpi-var">VaR 95% —</div></div>
   <div class="kpi"><div class="lbl">Beta</div><div class="val" id="kpi-beta">—</div><div class="sub" id="kpi-corr">corr —</div></div>
 </div>
 
@@ -231,6 +232,8 @@
 
     document.getElementById("kpi-vol").textContent = r.annualized_volatility != null ? fmtPct(r.annualized_volatility) : "—";
     document.getElementById("kpi-sharpe").textContent = "Sharpe " + (r.annualized_sharpe != null ? r.annualized_sharpe.toFixed(2) : "—");
+    document.getElementById("kpi-sortino").textContent = r.annualized_sortino != null ? r.annualized_sortino.toFixed(2) : "—";
+    document.getElementById("kpi-var").textContent = "VaR 95% " + (r.var_95_monthly != null ? fmtPct(r.var_95_monthly) : "—");
     document.getElementById("kpi-beta").textContent = r.beta != null ? r.beta.toFixed(2) : "—";
     document.getElementById("kpi-corr").textContent = "corr " + (r.correlation != null ? r.correlation.toFixed(2) : "—") + (r.benchmark_name ? ` · vs ${r.benchmark_name}` : "");
 

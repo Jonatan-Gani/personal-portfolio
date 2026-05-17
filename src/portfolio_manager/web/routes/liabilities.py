@@ -83,7 +83,7 @@ def create_liability(
     )
     c.portfolio.add_liability(liab)
     if opening_balance and opening_balance != 0:
-        c.transactions_repo.insert(Transaction(
+        tx = Transaction(
             transaction_date=date.today(),
             transaction_type=TransactionType.OPENING_BALANCE,
             entity_kind=PositionKind.LIABILITY,
@@ -91,7 +91,9 @@ def create_liability(
             amount=opening_balance,
             currency=currency,
             notes="opening balance",
-        ))
+        )
+        c.fx.stamp_transaction(tx, c.config.reporting.base_currency)
+        c.transactions_repo.insert(tx)
     return RedirectResponse("/liabilities", status_code=303)
 
 
