@@ -113,6 +113,8 @@ def update_asset(
     sector: str | None = Form(None),
     price_provider: str | None = Form(None),
     account_id: str | None = Form(None),
+    market_index_symbol: str | None = Form(None),
+    sector_index_symbol: str | None = Form(None),
     notes: str | None = Form(None),
     tags: str | None = Form(None),
 ):
@@ -131,6 +133,8 @@ def update_asset(
     existing.sector = sector or None
     existing.price_provider = price_provider or None
     existing.account_id = account_id or None
+    existing.market_index_symbol = (market_index_symbol or "").strip().upper() or None
+    existing.sector_index_symbol = (sector_index_symbol or "").strip().upper() or None
     existing.notes = notes
     existing.tags = [t.strip() for t in (tags or "").split(",") if t.strip()]
     c.portfolio.update_asset(existing)

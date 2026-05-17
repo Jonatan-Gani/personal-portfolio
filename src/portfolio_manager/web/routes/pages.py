@@ -11,6 +11,24 @@ from ...services.scope import parse_scope
 router = APIRouter()
 log = logging.getLogger(__name__)
 
+# Whether the once-per-process app-start valuation has run yet.
+_app_start_done = False
+
+
+def _app_start_valuation(c) -> None:
+    """Once per app start: take a whole-portfolio valuation for the net-worth
+    line and record the day's end-of-day prices. Best-effort — a failure here
+    must not block the dashboard."""
+    try:
+        c.snapshot.take(notes="app start")
+    except Exception as e:
+        log.warning("app-start valuation failed: %s", e)
+    try:
+        from ...services.price_history_sync import record_eod_prices
+        record_eod_prices(c)
+    except Exception as e:
+        log.warning("app-start price recording failed: %s", e)
+
 
 def _maybe_auto_snapshot(c, force: bool) -> tuple[bool, str | None]:
     """Take a fresh snapshot if config says so and the latest is stale (or none exists).
@@ -33,6 +51,11 @@ def _maybe_auto_snapshot(c, force: bool) -> tuple[bool, str | None]:
 def dashboard(request: Request, refresh: bool = False, scope: str = "all"):
     c = request.app.state.container
     templates = request.app.state.templates
+
+    global _app_start_done
+    if not _app_start_done:
+        _app_start_done = True
+        _app_start_valuation(c)
 
     auto_taken, _ = _maybe_auto_snapshot(c, force=refresh)
 
