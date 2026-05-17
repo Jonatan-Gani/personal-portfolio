@@ -36,7 +36,6 @@ def portfolio_is_empty(c) -> bool:
 def seed_example_portfolio(c) -> dict:
     """Populate a demo portfolio. The caller must check `portfolio_is_empty`
     first; this function assumes a clean slate. Returns counts for feedback."""
-    base = c.config.reporting.base_currency
     today = date.today()
 
     def ago(n: int) -> date:
@@ -52,7 +51,7 @@ def seed_example_portfolio(c) -> dict:
             entity_id=entity_id, quantity=quantity, price=price, amount=amount,
             currency=currency, fees=fees, notes="example data",
         )
-        c.fx.stamp_transaction(tx, base)
+        c.inception.stamp(tx)
         c.transactions_repo.insert(tx)
 
     # --- accounts ---------------------------------------------------------

@@ -6,6 +6,7 @@ from .drift import DriftService
 from .exposure import ExposureService
 from .fx import FXService
 from .holdings import HoldingsService
+from .inception import InceptionService
 from .income import IncomeService
 from .markets import MarketsService
 from .performance import PerformanceService
@@ -24,6 +25,7 @@ __all__ = [
     "ExposureService",
     "FXService",
     "HoldingsService",
+    "InceptionService",
     "IncomeService",
     "MarketsService",
     "PerformanceService",

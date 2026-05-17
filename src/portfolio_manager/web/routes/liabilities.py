@@ -92,7 +92,7 @@ def create_liability(
             currency=currency,
             notes="opening balance",
         )
-        c.fx.stamp_transaction(tx, c.config.reporting.base_currency)
+        c.inception.stamp(tx)
         c.transactions_repo.insert(tx)
     return RedirectResponse("/liabilities", status_code=303)
 

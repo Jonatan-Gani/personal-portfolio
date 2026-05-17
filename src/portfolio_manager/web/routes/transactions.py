@@ -256,7 +256,7 @@ def create_transaction(
         fees=fees,
         notes=notes,
     )
-    c.fx.stamp_transaction(tx, c.config.reporting.base_currency)
+    c.inception.stamp(tx)
     c.transactions_repo.insert(tx)
     if c.config.auto_snapshot.enabled:
         c.snapshot.take(notes="auto · after transaction")
@@ -294,7 +294,7 @@ def update_transaction(
     existing.fees = fees
     existing.notes = notes
     # Currency or date may have changed — re-pin the inception FX rate.
-    c.fx.stamp_transaction(existing, c.config.reporting.base_currency)
+    c.inception.stamp(existing)
     c.transactions_repo.update(existing)
     if c.config.auto_snapshot.enabled:
         c.snapshot.take(notes="auto · after transaction edit")
@@ -342,7 +342,6 @@ async def position_builder_submit(request: Request):
     c = request.app.state.container
     form = await request.form()
     as_of = _parse_date(form.get("as_of")) or date.today()
-    base = c.config.reporting.base_currency
 
     kinds = form.getlist("kind")
     symbols = form.getlist("symbol")
@@ -393,7 +392,7 @@ async def position_builder_submit(request: Request):
             entity_kind=kind, entity_id=eid, quantity=qty, price=price,
             amount=amount, currency=ccy, notes="position builder",
         )
-        c.fx.stamp_transaction(tx, base)
+        c.inception.stamp(tx)
         c.transactions_repo.insert(tx)
         created += 1
 

@@ -431,3 +431,29 @@ def test_backfill_transaction_fx(services):
 
     # Idempotent — a second run finds nothing pending.
     assert backfill_transaction_fx(tx, services["fx"], "USD")["pending"] == 0
+
+
+# =========================================================== Index defaults
+
+def test_default_indices_by_currency_and_sector():
+    from portfolio_manager.services.indices import (
+        assign_default_indices, default_market_index, default_sector_index,
+    )
+    assert default_market_index("USD") == "^GSPC"
+    assert default_market_index("EUR") == "^STOXX"
+    assert default_market_index("ZZZ") == "^GSPC"          # fallback
+    assert default_sector_index("Technology") == "XLK"
+    assert default_sector_index("Financial Services") == "XLF"
+    assert default_sector_index(None) is None
+
+    a = Asset(name="X", symbol="X", instrument_type=InstrumentType.EQUITY,
+              asset_class=AssetClass.EQUITY, currency="GBP", sector="Energy")
+    assign_default_indices(a)
+    assert a.market_index_symbol == "^FTSE"
+    assert a.sector_index_symbol == "XLE"
+    # A user-set value is left alone.
+    a2 = Asset(name="Y", symbol="Y", instrument_type=InstrumentType.EQUITY,
+               asset_class=AssetClass.EQUITY, currency="USD",
+               market_index_symbol="^NDX")
+    assign_default_indices(a2)
+    assert a2.market_index_symbol == "^NDX"
