@@ -20,6 +20,7 @@ from ..repositories import (
     TargetAllocationRepository,
     TransactionRepository,
 )
+from ..repositories.price_history import PriceHistoryStore, build_price_history_store
 from ..services import (
     AccrualService,
     AssetLookupService,
@@ -29,14 +30,16 @@ from ..services import (
     ExposureService,
     FXService,
     HoldingsService,
+    InceptionService,
     IncomeService,
     MarketsService,
     PerformanceService,
     PortfolioService,
+    ReturnSplitService,
     ReturnsService,
     RiskService,
-    SnapshotService,
     SnapshotDiffService,
+    SnapshotService,
 )
 
 
@@ -57,6 +60,8 @@ class Container:
     drift: DriftService
     income: IncomeService
     accrual: AccrualService
+    inception: InceptionService
+    return_split: ReturnSplitService
     risk: RiskService
     markets: MarketsService
     asset_lookup: AssetLookupService
@@ -69,6 +74,7 @@ class Container:
     account_groups_repo: AccountGroupRepository
     app_settings_repo: AppSettingsRepository
     price_cache: PriceCache
+    price_history: PriceHistoryStore
 
 
 def build_container(config: AppConfig, db: Database) -> Container:
@@ -88,6 +94,7 @@ def build_container(config: AppConfig, db: Database) -> Container:
     app_settings_repo = AppSettingsRepository(db)
     fx_cache = FXRateCache(db)
     price_cache = PriceCache(db)
+    price_history = build_price_history_store(config.history.backend, db)
 
     fx_ttl = int(config.providers.fx.options.get("cache_ttl_hours", 12))
     fx_service = FXService(provider=fx_provider, cache=fx_cache, cache_ttl_hours=fx_ttl)
@@ -123,6 +130,15 @@ def build_container(config: AppConfig, db: Database) -> Container:
     drift_service = DriftService(db, targets_repo, exposure_service)
     income_service = IncomeService(db, fx_service, cost_basis_service, config.reporting.base_currency)
     risk_service = RiskService(db, performance_service)
+    inception_service = InceptionService(
+        fx=fx_service, price_provider=price_provider, assets=asset_repo,
+        history=price_history, base_currency=config.reporting.base_currency,
+    )
+    return_split_service = ReturnSplitService(
+        cost_basis=cost_basis_service, fx=fx_service, price_provider=price_provider,
+        history=price_history, portfolio=portfolio,
+        base_currency=config.reporting.base_currency,
+    )
     markets_service = MarketsService(provider=price_provider, cache=price_cache, cache_ttl_minutes=60)
     asset_lookup_service = AssetLookupService()
 
@@ -142,6 +158,8 @@ def build_container(config: AppConfig, db: Database) -> Container:
         drift=drift_service,
         income=income_service,
         accrual=accrual,
+        inception=inception_service,
+        return_split=return_split_service,
         risk=risk_service,
         markets=markets_service,
         asset_lookup=asset_lookup_service,
@@ -154,4 +172,5 @@ def build_container(config: AppConfig, db: Database) -> Container:
         account_groups_repo=account_groups_repo,
         app_settings_repo=app_settings_repo,
         price_cache=price_cache,
+        price_history=price_history,
     )

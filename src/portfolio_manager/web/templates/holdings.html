@@ -196,10 +196,14 @@
               </td>
               <td class="num">{% if r.quantity is not none %}{{ "{:,.4f}".format(r.quantity) }}{% else %}<span class="faint">—</span>{% endif %}</td>
               <td class="mono">{{ r.currency }}</td>
-              <td class="num">{% if r.price_local is not none %}{{ "{:,.4f}".format(r.price_local) }}{% else %}<span class="faint">—</span>{% endif %}</td>
+              <td class="num">{% if r.price_local is not none %}{{ "{:,.4f}".format(r.price_local) }}{% else %}<span class="faint" title="no price available — quantity is still tracked">price unknown</span>{% endif %}</td>
               <td class="num">
+                {% if r.priced %}
                 <div>{{ "{:,.0f}".format(r.value_local) }} <span class="faint">{{ r.currency }}</span></div>
                 <div class="meta mono"><strong>{{ "{:,.0f}".format(r.value_base) }}</strong> {{ base_currency }}</div>
+                {% else %}
+                <div class="faint">—</div>
+                {% endif %}
               </td>
               <td>
                 <a class="btn btn-sm btn-ghost"
@@ -222,21 +226,22 @@
 
 <section class="card section" id="attribution-card">
   <div class="card-header">
-    <h3>Return attribution</h3>
-    <span class="info-tip" title="Unrealized return split into the asset's price move and the currency move, in {{ base_currency }}. Cost basis uses the FX rate pinned when each lot was bought. Click a row to see its FIFO lots.">i</span>
+    <h3>Return split</h3>
+    <span class="info-tip" title="Each holding's gain since you bought it, in {{ base_currency }}, split into four causes: the currency moving, the whole market moving, the sector moving, and your pick (how the asset did versus its sector). The four add up to the total. Click a row for its FIFO lots.">i</span>
   </div>
   <div class="card-body flush">
     <table class="data" id="attribution-table">
       <thead>
         <tr>
           <th>Asset</th>
-          <th class="num">Cost basis ({{ base_currency }})</th>
-          <th class="num">Unrealized ({{ base_currency }})</th>
-          <th class="num">Price effect</th>
-          <th class="num">FX effect</th>
+          <th class="num">Currency</th>
+          <th class="num">Market</th>
+          <th class="num">Sector</th>
+          <th class="num">Pick</th>
+          <th class="num">Total ({{ base_currency }})</th>
         </tr>
       </thead>
-      <tbody><tr><td colspan="5" class="table-empty">Loading…</td></tr></tbody>
+      <tbody><tr><td colspan="6" class="table-empty">Loading…</td></tr></tbody>
     </table>
   </div>
 </section>
@@ -311,30 +316,31 @@
       .catch(() => { cell.innerHTML = '<span class="faint">Could not load lots.</span>'; });
   }
 
-  fetch("/api/holdings/positions?currency=" + encodeURIComponent(BASE))
+  fetch("/api/holdings/return-split")
     .then(r => r.json())
     .then(data => {
-      const rows = (data.rows || []).filter(r => r.unrealized_base != null && r.quantity);
+      const rows = (data.rows || []).filter(r => r.quantity);
       if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="5" class="table-empty">No priced positions yet — take a snapshot first.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="table-empty">No priced holdings yet.</td></tr>';
         return;
       }
       tbody.innerHTML = rows.map(r => `
-        <tr class="attr-row" data-asset="${r.asset_id}" data-ccy="${r.currency || ''}" style="cursor:pointer">
-          <td><span class="tree-toggle">▸</span><strong>${r.symbol || r.name || r.asset_id.slice(0,8)}</strong>
-            ${r.incomplete_fx ? ' <span class="faint" title="some lots have no pinned FX rate">⚠</span>' : ''}</td>
-          <td class="num">${fmt(r.cost_basis_base)}</td>
-          <td class="num">${signed(r.unrealized_base)}</td>
-          <td class="num">${signed(r.price_effect_base)}</td>
-          <td class="num">${signed(r.fx_effect_base)}</td>
+        <tr class="attr-row" data-asset="${r.asset_id}" data-ccy="" style="cursor:pointer">
+          <td><span class="tree-toggle">▸</span><strong>${r.symbol || r.asset_id.slice(0,8)}</strong>
+            ${!r.complete ? ' <span class="faint" title="some lots predate market/sector capture — shown under Pick">⚠</span>' : ''}</td>
+          <td class="num">${signed(r.currency)}</td>
+          <td class="num">${signed(r.market)}</td>
+          <td class="num">${signed(r.sector)}</td>
+          <td class="num">${signed(r.pick)}</td>
+          <td class="num"><strong>${signed(r.total)}</strong></td>
         </tr>
-        <tr class="attr-detail" id="lots-${r.asset_id}" hidden><td colspan="5"></td></tr>`).join("");
+        <tr class="attr-detail" id="lots-${r.asset_id}" hidden><td colspan="6"></td></tr>`).join("");
       tbody.querySelectorAll(".attr-row").forEach(tr => {
         tr.addEventListener("click", () => toggleLots(tr));
       });
     })
     .catch(() => {
-      tbody.innerHTML = '<tr><td colspan="5" class="table-empty">Could not load attribution.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="table-empty">Could not load the return split.</td></tr>';
     });
 })();
 </script>

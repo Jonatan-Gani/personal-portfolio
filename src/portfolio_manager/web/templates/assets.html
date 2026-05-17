@@ -151,6 +151,13 @@
                     </select>
                   </label>
                   {{ account_select(accounts, current=a.account_id) }}
+                  <label class="field">Market index
+                    <input name="market_index_symbol" value="{{ a.market_index_symbol or '' }}" placeholder="^GSPC">
+                    <span class="hint">Used to split this asset's return.</span>
+                  </label>
+                  <label class="field">Sector index
+                    <input name="sector_index_symbol" value="{{ a.sector_index_symbol or '' }}" placeholder="XLK">
+                  </label>
                   <label class="field">Tags <input name="tags" value="{{ a.tags|join(', ') }}"></label>
                   <label class="field span-2">Notes <input name="notes" value="{{ a.notes or '' }}"></label>
                   <div class="span-4 row-actions">

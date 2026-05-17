@@ -37,6 +37,10 @@ class Asset(BaseModel):
     sector: Optional[str] = None
     price_provider: Optional[str] = None
     account_id: Optional[str] = None
+    # Indices this asset's return is measured against, for the currency / market
+    # / sector / pick split. Auto-defaulted on creation; overridable.
+    market_index_symbol: Optional[str] = None
+    sector_index_symbol: Optional[str] = None
     notes: Optional[str] = None
     tags: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=utcnow)
@@ -119,6 +123,9 @@ class Transaction(BaseModel):
     # as of `transaction_date`. None if not captured (legacy rows / provider down).
     fx_rate_to_base: Optional[float] = None
     fx_base_currency: Optional[CurrencyStr] = None
+    # Market / sector index levels frozen at inception, for the return split.
+    market_index_level: Optional[float] = None
+    sector_index_level: Optional[float] = None
     created_at: datetime = Field(default_factory=utcnow)
 
 

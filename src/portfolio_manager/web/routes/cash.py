@@ -56,7 +56,7 @@ def create_cash(
             currency=currency,
             notes="opening balance set on account creation",
         )
-        c.fx.stamp_transaction(tx, c.config.reporting.base_currency)
+        c.inception.stamp(tx)
         c.transactions_repo.insert(tx)
         if c.config.auto_snapshot.enabled:
             c.snapshot.take(notes="auto · after cash account created")

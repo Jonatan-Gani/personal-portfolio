@@ -605,6 +605,24 @@ def holdings_positions(request: Request, currency: str | None = None):
     return {"currency": ccy, "snapshot_id": snap_id, "rows": out}
 
 
+# ──────────────────────────────────────────────────────── /api/holdings/return-split
+@router.get("/holdings/return-split")
+def holdings_return_split(request: Request):
+    """Per-holding gain split into currency / market / sector / pick, in the
+    base currency, from each lot's frozen inception values to live prices."""
+    c = request.app.state.container
+    splits = c.return_split.for_portfolio()
+    rows = [
+        {
+            "asset_id": s.asset_id, "symbol": s.symbol, "quantity": s.quantity,
+            "total": s.total, "currency": s.currency, "market": s.market,
+            "sector": s.sector, "pick": s.pick, "complete": s.complete,
+        }
+        for s in splits
+    ]
+    return {"base_currency": c.config.reporting.base_currency, "rows": rows}
+
+
 # ──────────────────────────────────────────────────────────── /api/holdings/lots
 @router.get("/holdings/lots/{asset_id}")
 def holdings_lots(request: Request, asset_id: str):

@@ -105,11 +105,10 @@ async def import_commit(
     c = request.app.state.container
     txs = json.loads(payload)
     n = 0
-    base_currency = c.config.reporting.base_currency
     for d in txs:
         # Re-validate via Pydantic to be safe; date/enum strings are reparsed.
         tx = Transaction.model_validate(d)
-        c.fx.stamp_transaction(tx, base_currency)
+        c.inception.stamp(tx)
         c.transactions_repo.insert(tx)
         n += 1
     return RedirectResponse(f"/transactions?import_count={n}", status_code=303)

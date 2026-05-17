@@ -74,6 +74,29 @@ def backfill_fx():
     )
 
 
+@app.command("record-prices")
+def record_prices():
+    """Record today's end-of-day price for every held asset and index."""
+    from .services.price_history_sync import record_eod_prices
+
+    container, _ = _container()
+    n = record_eod_prices(container)
+    console.print(f"[green]recorded[/] {n} end-of-day prices")
+
+
+@app.command("backfill-prices")
+def backfill_prices():
+    """Pull daily price history for held assets and indices into the local store."""
+    from .services.price_history_sync import backfill_price_history
+
+    container, _ = _container()
+    res = backfill_price_history(container)
+    console.print(
+        f"[green]stored[/] {res['prices_stored']} prices across {res['symbols']} symbols"
+        + (f" · [yellow]{res['symbols_failed']} unavailable[/]" if res["symbols_failed"] else "")
+    )
+
+
 @app.command("list-snapshots")
 def list_snapshots(limit: int = 25):
     container, _ = _container()

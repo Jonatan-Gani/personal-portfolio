@@ -4,6 +4,7 @@ from ..domain.models import Asset, CashHolding, Liability
 from ..repositories.assets import AssetRepository
 from ..repositories.cash import CashRepository
 from ..repositories.liabilities import LiabilityRepository
+from .indices import assign_default_indices
 
 
 class PortfolioService:
@@ -19,6 +20,7 @@ class PortfolioService:
 
     # Assets
     def add_asset(self, asset: Asset) -> Asset:
+        assign_default_indices(asset)
         return self.assets.upsert(asset)
 
     def update_asset(self, asset: Asset) -> Asset:

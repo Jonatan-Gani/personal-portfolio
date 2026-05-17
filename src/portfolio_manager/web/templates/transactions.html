@@ -127,7 +127,29 @@
   const NAME_FIELD = document.getElementById("tx-name-field");
   const SYMBOL = document.getElementById("tx-symbol");
   const NAME = document.getElementById("tx-name");
+  const ACCOUNT = document.getElementById("tx-account");
   const LOOKUP_BTN = document.getElementById("tx-lookup-btn");
+
+  // Existing positions, for the form's auto-fill.
+  const KNOWN = {{ known_positions | tojson }};
+
+  // When the symbol or name matches a position you already hold, fill the rest
+  // of the cells from it — on every change.
+  function _match(field, value) {
+    const v = (value || "").trim().toLowerCase();
+    if (!v) return null;
+    if (field === "symbol")
+      return KNOWN.find(k => k.symbol && k.symbol.toLowerCase() === v) || null;
+    return KNOWN.find(k => k.name && k.name.toLowerCase() === v) || null;
+  }
+  function autoFill(field) {
+    const m = _match(field, field === "symbol" ? SYMBOL.value : NAME.value);
+    if (!m) return;
+    if (field === "symbol" && m.name) NAME.value = m.name;
+    if (field === "name" && m.symbol) SYMBOL.value = m.symbol;
+    if (m.currency) CURRENCY.value = m.currency;
+    if (m.account_id && ACCOUNT) ACCOUNT.value = m.account_id;
+  }
   const LOOKUP_HINT = document.getElementById("tx-lookup-hint");
   const QTY = document.getElementById("tx-qty");
   const PRICE = document.getElementById("tx-price");
@@ -246,6 +268,8 @@
 
   TYPE.addEventListener("change", () => { applyTypeVisibility(); recompute(); });
   KIND.addEventListener("change", () => { applyTypeVisibility(); recompute(); });
+  SYMBOL.addEventListener("input", () => autoFill("symbol"));
+  NAME.addEventListener("input", () => autoFill("name"));
   [QTY, PRICE, FEES].forEach(el => el && el.addEventListener("input", recompute));
   AMOUNT.addEventListener("input", () => { AMOUNT.dataset.userTouched = "1"; });
 

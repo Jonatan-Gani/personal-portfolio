@@ -16,6 +16,11 @@
   {% block head_extra %}{% endblock %}
 </head>
 <body class="{{ 'privacy' if request and request.state.ui_privacy }}">
+  <div class="market-ribbon" id="market-ribbon" aria-label="Market quotes">
+    <div class="market-ribbon-track" id="market-ribbon-track">
+      <span class="mr-msg">Loading markets…</span>
+    </div>
+  </div>
   <header class="topbar">
     <a href="/" class="brand">
       <span class="dot"></span>
@@ -58,5 +63,119 @@
   </footer>
 
   {% include "_datalists.html" %}
+
+  <script>
+  (function () {
+    const ribbon = document.getElementById("market-ribbon");
+    const track  = document.getElementById("market-ribbon-track");
+    if (!ribbon || !track) return;
+
+    const PX_PER_SEC = 50;
+    const REFRESH_MS = 10 * 60 * 1000;
+    const reduceMotion =
+      window.matchMedia &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let lastSig = null;
+
+    function fmtPrice(p) {
+      return p.toLocaleString(undefined, { maximumFractionDigits: p >= 100 ? 2 : 4 });
+    }
+    function fmtPct(x) {
+      return (x > 0 ? "+" : "") + (x * 100).toFixed(2) + "%";
+    }
+    function showMessage(text) {
+      track.style.animationName = "none";
+      track.textContent = "";
+      const s = document.createElement("span");
+      s.className = "mr-msg";
+      s.textContent = text;
+      track.appendChild(s);
+    }
+    function buildItem(q) {
+      const item = document.createElement("span");
+      item.className = "mr-item";
+      const lbl = document.createElement("span");
+      lbl.className = "mr-lbl";
+      lbl.textContent = q.label || q.symbol;
+      item.appendChild(lbl);
+      if (q.price != null) {
+        const px = document.createElement("span");
+        px.className = "mr-px";
+        px.textContent = fmtPrice(q.price);
+        item.appendChild(px);
+        let dir = "flat";
+        if (q.change_pct != null && q.change_pct > 0) dir = "up";
+        else if (q.change_pct != null && q.change_pct < 0) dir = "down";
+        const chg = document.createElement("span");
+        chg.className = "mr-chg " + dir;
+        const arrow = dir === "up" ? "▲ " : dir === "down" ? "▼ " : "";
+        chg.textContent =
+          q.change_pct != null ? arrow + fmtPct(q.change_pct) : "—";
+        item.appendChild(chg);
+      } else {
+        const err = document.createElement("span");
+        err.className = "mr-chg flat";
+        err.textContent = q.error || "n/a";
+        item.appendChild(err);
+      }
+      return item;
+    }
+    function buildUnit(quotes) {
+      const unit = document.createElement("span");
+      unit.className = "mr-unit";
+      for (const q of quotes) unit.appendChild(buildItem(q));
+      return unit;
+    }
+    function render(quotes) {
+      track.style.animationName = "none";
+      track.textContent = "";
+      if (!quotes.length) {
+        showMessage("No market watchlist configured.");
+        return;
+      }
+      const unit = buildUnit(quotes);
+      track.appendChild(unit);
+      if (reduceMotion) return;
+
+      // Repeat the quotes until one unit spans the viewport, then clone the
+      // unit so the -50% keyframe wraps with no visible seam.
+      let guard = 0;
+      while (
+        unit.getBoundingClientRect().width < ribbon.getBoundingClientRect().width &&
+        guard++ < 30
+      ) {
+        for (const q of quotes) unit.appendChild(buildItem(q));
+      }
+      const unitWidth = unit.getBoundingClientRect().width;
+      track.appendChild(unit.cloneNode(true));
+
+      void track.offsetWidth;
+      track.style.animationName = "ribbon-scroll";
+      track.style.animationDuration =
+        Math.max(12, Math.round(unitWidth / PX_PER_SEC)) + "s";
+      track.style.animationTimingFunction = "linear";
+      track.style.animationIterationCount = "infinite";
+    }
+    async function load() {
+      try {
+        const resp = await fetch("/api/markets/watchlist", { cache: "no-store" });
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        const quotes = (await resp.json()).quotes || [];
+        const sig = JSON.stringify(
+          quotes.map((q) => [q.symbol, q.price, q.change_pct, q.error])
+        );
+        if (sig === lastSig) return;
+        lastSig = sig;
+        render(quotes);
+      } catch (err) {
+        if (lastSig === null) showMessage("Markets unavailable");
+      }
+    }
+    load();
+    setInterval(function () {
+      if (document.visibilityState === "visible") load();
+    }, REFRESH_MS);
+  })();
+  </script>
 </body>
 </html>

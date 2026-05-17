@@ -182,6 +182,16 @@ def list_transactions(
     liabilities = c.portfolio.list_liabilities()
     accounts = c.accounts_repo.list_active()
 
+    # Known positions for the form's auto-fill (symbol/name → currency, account).
+    known_positions = (
+        [{"kind": "asset", "symbol": a.symbol or "", "name": a.name,
+          "currency": a.currency, "account_id": a.account_id or ""} for a in assets]
+        + [{"kind": "cash", "symbol": "", "name": ca.account_name,
+            "currency": ca.currency, "account_id": ca.account_id or ""} for ca in cash_accounts]
+        + [{"kind": "liability", "symbol": "", "name": li.name,
+            "currency": li.currency, "account_id": li.account_id or ""} for li in liabilities]
+    )
+
     return request.app.state.templates.TemplateResponse(
         request,
         "transactions.html",
@@ -194,6 +204,7 @@ def list_transactions(
                 "since": since, "until": until, "account": account,
             },
             "transaction_types": [t.value for t in TransactionType],
+            "known_positions": known_positions,
             "assets": assets,
             "cash_accounts": cash_accounts,
             "liabilities": liabilities,
@@ -256,7 +267,7 @@ def create_transaction(
         fees=fees,
         notes=notes,
     )
-    c.fx.stamp_transaction(tx, c.config.reporting.base_currency)
+    c.inception.stamp(tx)
     c.transactions_repo.insert(tx)
     if c.config.auto_snapshot.enabled:
         c.snapshot.take(notes="auto · after transaction")
@@ -294,7 +305,7 @@ def update_transaction(
     existing.fees = fees
     existing.notes = notes
     # Currency or date may have changed — re-pin the inception FX rate.
-    c.fx.stamp_transaction(existing, c.config.reporting.base_currency)
+    c.inception.stamp(existing)
     c.transactions_repo.update(existing)
     if c.config.auto_snapshot.enabled:
         c.snapshot.take(notes="auto · after transaction edit")
@@ -342,7 +353,6 @@ async def position_builder_submit(request: Request):
     c = request.app.state.container
     form = await request.form()
     as_of = _parse_date(form.get("as_of")) or date.today()
-    base = c.config.reporting.base_currency
 
     kinds = form.getlist("kind")
     symbols = form.getlist("symbol")
@@ -393,7 +403,7 @@ async def position_builder_submit(request: Request):
             entity_kind=kind, entity_id=eid, quantity=qty, price=price,
             amount=amount, currency=ccy, notes="position builder",
         )
-        c.fx.stamp_transaction(tx, base)
+        c.inception.stamp(tx)
         c.transactions_repo.insert(tx)
         created += 1
 
