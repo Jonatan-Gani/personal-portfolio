@@ -217,6 +217,61 @@
   {% endif %}
 {% endfor %}
 
+<section class="card section" id="attribution-card">
+  <div class="card-header">
+    <h3>Return attribution</h3>
+    <span class="info-tip" title="Unrealized return split into the asset's price move and the currency move, in {{ base_currency }}. Cost basis uses the FX rate pinned when each lot was bought.">i</span>
+  </div>
+  <div class="card-body flush">
+    <table class="data" id="attribution-table">
+      <thead>
+        <tr>
+          <th>Asset</th>
+          <th class="num">Cost basis ({{ base_currency }})</th>
+          <th class="num">Unrealized ({{ base_currency }})</th>
+          <th class="num">Price effect</th>
+          <th class="num">FX effect</th>
+        </tr>
+      </thead>
+      <tbody><tr><td colspan="5" class="table-empty">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+<script>
+(function () {
+  const BASE = {{ base_currency | tojson }};
+  const tbody = document.querySelector("#attribution-table tbody");
+  const fmt = n => (n == null) ? "—" : n.toLocaleString(undefined, {maximumFractionDigits: 0});
+  const signed = n => {
+    if (n == null) return '<span class="faint">—</span>';
+    const cls = n < 0 ? ' style="color:var(--neg)"' : (n > 0 ? ' style="color:var(--pos,#2a7)"' : '');
+    return `<span${cls}>${n > 0 ? "+" : ""}${fmt(n)}</span>`;
+  };
+  fetch("/api/holdings/positions?currency=" + encodeURIComponent(BASE))
+    .then(r => r.json())
+    .then(data => {
+      const rows = (data.rows || []).filter(r => r.unrealized_base != null && r.quantity);
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="table-empty">No priced positions yet — take a snapshot first.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(r => `
+        <tr>
+          <td><strong>${r.symbol || r.name || r.asset_id.slice(0,8)}</strong>
+            ${r.incomplete_fx ? ' <span class="faint" title="some lots have no pinned FX rate">⚠</span>' : ''}</td>
+          <td class="num">${fmt(r.cost_basis_base)}</td>
+          <td class="num">${signed(r.unrealized_base)}</td>
+          <td class="num">${signed(r.price_effect_base)}</td>
+          <td class="num">${signed(r.fx_effect_base)}</td>
+        </tr>`).join("");
+    })
+    .catch(() => {
+      tbody.innerHTML = '<tr><td colspan="5" class="table-empty">Could not load attribution.</td></tr>';
+    });
+})();
+</script>
+
 {% include "_asset_lookup_js.html" %}
 
 <style>

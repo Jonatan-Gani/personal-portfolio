@@ -10,7 +10,11 @@ from portfolio_manager.domain.enums import (
 from portfolio_manager.domain.models import (
     Asset, CashHolding, Liability, TargetAllocation, Transaction,
 )
-from portfolio_manager.repositories import LiabilityRepository, TargetAllocationRepository
+from portfolio_manager.repositories import (
+    LiabilityRepository,
+    TargetAllocationRepository,
+    TransactionRepository,
+)
 from portfolio_manager.services import (
     AccrualService, CostBasisService, DriftService, ExposureService, IncomeService,
     PerformanceService, RiskService, SnapshotDiffService,
@@ -303,3 +307,57 @@ def test_seed_example_portfolio(db):
     # Every seeded transaction is FX-stamped.
     txs = c.transactions_repo.list_recent(limit=100)
     assert txs and all(t.fx_rate_to_base is not None for t in txs)
+
+
+# =========================================================== Currency attribution
+
+def test_cost_basis_base_uses_pinned_rates(db):
+    """Base-currency cost basis uses the FX rate pinned at each purchase."""
+    tx = TransactionRepository(db)
+    tx.insert(Transaction(
+        transaction_date=date(2025, 1, 1), transaction_type=TransactionType.BUY,
+        entity_kind=PositionKind.ASSET, entity_id="A",
+        quantity=10, price=100, amount=1000, currency="EUR",
+        fx_rate_to_base=1.10, fx_base_currency="USD"))
+    tx.insert(Transaction(
+        transaction_date=date(2025, 6, 1), transaction_type=TransactionType.BUY,
+        entity_kind=PositionKind.ASSET, entity_id="A",
+        quantity=5, price=120, amount=600, currency="EUR",
+        fx_rate_to_base=1.20, fx_base_currency="USD"))
+    r = CostBasisService(db).compute("A")
+    assert r.total_cost_basis == pytest.approx(1600.0)        # EUR
+    assert r.total_cost_basis_base == pytest.approx(1820.0)   # 1000*1.10 + 600*1.20
+    assert r.incomplete_fx is False
+
+
+def test_currency_attribution_splits_price_and_fx(db):
+    tx = TransactionRepository(db)
+    tx.insert(Transaction(
+        transaction_date=date(2025, 1, 1), transaction_type=TransactionType.BUY,
+        entity_kind=PositionKind.ASSET, entity_id="A",
+        quantity=10, price=100, amount=1000, currency="EUR",
+        fx_rate_to_base=1.10, fx_base_currency="USD"))
+    tx.insert(Transaction(
+        transaction_date=date(2025, 6, 1), transaction_type=TransactionType.BUY,
+        entity_kind=PositionKind.ASSET, entity_id="A",
+        quantity=5, price=120, amount=600, currency="EUR",
+        fx_rate_to_base=1.20, fx_base_currency="USD"))
+    attr = CostBasisService(db).attribute_currency("A", current_price=130.0, current_fx_to_base=1.30)
+    assert attr is not None
+    # price effect = 10*(130-100)*1.10 + 5*(130-120)*1.20 = 390
+    assert attr.price_effect_base == pytest.approx(390.0)
+    # the split always reconstitutes the total unrealized return
+    assert attr.price_effect_base + attr.fx_effect_base == pytest.approx(attr.unrealized_base)
+    assert attr.complete is True
+
+
+def test_currency_attribution_flags_missing_fx(db):
+    tx = TransactionRepository(db)
+    tx.insert(Transaction(
+        transaction_date=date(2025, 1, 1), transaction_type=TransactionType.BUY,
+        entity_kind=PositionKind.ASSET, entity_id="A",
+        quantity=10, price=100, amount=1000, currency="EUR"))  # no pinned FX
+    r = CostBasisService(db).compute("A")
+    assert r.incomplete_fx is True
+    attr = CostBasisService(db).attribute_currency("A", current_price=110.0, current_fx_to_base=1.10)
+    assert attr is not None and attr.complete is False
