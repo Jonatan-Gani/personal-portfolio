@@ -1,14 +1,22 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 import pytest
 
 from portfolio_manager.domain.enums import (
-    AssetClass, InstrumentType, LiabilityType, PositionKind, TransactionType,
+    AssetClass,
+    InstrumentType,
+    LiabilityType,
+    PositionKind,
+    TransactionType,
 )
 from portfolio_manager.domain.models import (
-    Asset, CashHolding, Liability, TargetAllocation, Transaction,
+    Asset,
+    CashHolding,
+    Liability,
+    TargetAllocation,
+    Transaction,
 )
 from portfolio_manager.repositories import (
     LiabilityRepository,
@@ -16,11 +24,15 @@ from portfolio_manager.repositories import (
     TransactionRepository,
 )
 from portfolio_manager.services import (
-    AccrualService, CostBasisService, DriftService, ExposureService, IncomeService,
-    PerformanceService, RiskService, SnapshotDiffService,
+    AccrualService,
+    CostBasisService,
+    DriftService,
+    ExposureService,
+    IncomeService,
+    PerformanceService,
+    SnapshotDiffService,
 )
 from portfolio_manager.services.performance import _xirr_solve
-
 
 # ---------- helpers (copied from test_snapshot_flow style) ----------
 
@@ -286,9 +298,10 @@ def test_stamped_rate_survives_repo_round_trip(services):
 # =========================================================== Example portfolio
 
 def test_seed_example_portfolio(db):
-    from portfolio_manager.config import AppConfig, ProviderSpec, ProvidersConfig
+    from portfolio_manager.config import AppConfig, ProvidersConfig, ProviderSpec
     from portfolio_manager.services.example_data import (
-        portfolio_is_empty, seed_example_portfolio,
+        portfolio_is_empty,
+        seed_example_portfolio,
     )
     from portfolio_manager.web.deps import build_container
 
@@ -361,3 +374,38 @@ def test_currency_attribution_flags_missing_fx(db):
     assert r.incomplete_fx is True
     attr = CostBasisService(db).attribute_currency("A", current_price=110.0, current_fx_to_base=1.10)
     assert attr is not None and attr.complete is False
+
+
+# =========================================================== Position builder
+
+def test_position_builder_creates_opening_balances(db):
+    from fastapi.testclient import TestClient
+
+    from portfolio_manager.config import AppConfig, ProvidersConfig, ProviderSpec
+    from portfolio_manager.web.app import create_app
+
+    cfg = AppConfig(providers=ProvidersConfig(
+        fx=ProviderSpec(name="mock"), price=ProviderSpec(name="mock")))
+    cfg.auto_snapshot.enabled = False
+    cfg.database.path = str(db.path)
+    client = TestClient(create_app(cfg))
+
+    assert client.get("/position-builder").status_code == 200
+    r = client.post("/position-builder", data={
+        "as_of": "2025-01-10",
+        "kind": ["asset", "cash", "asset"],
+        "symbol": ["AAPL", "", ""],
+        "name": ["Apple Inc.", "Chase Checking", ""],   # 3rd row blank → skipped
+        "account_id": ["", "", ""],
+        "quantity": ["50", "", ""],
+        "unit_cost": ["170", "", ""],
+        "amount": ["", "25000", ""],
+        "currency": ["USD", "USD", ""],
+    }, follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/holdings?builder=2"
+
+    c = client.app.state.container
+    holdings = c.holdings.at()
+    assert list(holdings.asset_quantities.values()) == [50.0]
+    assert list(holdings.cash_balances.values()) == [25000.0]

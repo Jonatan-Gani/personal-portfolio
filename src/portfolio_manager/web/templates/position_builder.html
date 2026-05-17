@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Position builder{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div class="titles">
+    <span class="eyebrow">Setup</span>
+    <h1>Position builder</h1>
+  </div>
+  <p class="lede">Enter what you already hold — one row per position. Each becomes an
+    <code>opening_balance</code> transaction dated below, so holdings and cost basis start
+    from a clean baseline. New symbols are created automatically.</p>
+</div>
+
+<form method="post" action="/position-builder" id="pb-form">
+  <div class="card">
+    <div class="card-body">
+      <label class="field" style="max-width:16rem">As-of date
+        <input type="date" name="as_of" value="{{ today }}" required>
+        <span class="hint">The date these opening balances are recorded on.</span>
+      </label>
+
+      <table class="data" id="pb-table" style="margin-top:1rem">
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Symbol</th>
+            <th>Name</th>
+            <th>Account</th>
+            <th class="num">Quantity</th>
+            <th class="num">Unit cost</th>
+            <th class="num">Amount</th>
+            <th>Ccy</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="pb-rows"></tbody>
+      </table>
+
+      <div class="row-actions" style="margin-top:.75rem">
+        <button type="button" class="btn btn-sm" id="pb-add">+ Add row</button>
+      </div>
+
+      <div style="margin-top:1rem">
+        <button class="btn btn-primary">Create positions</button>
+        <a class="btn btn-ghost" href="/holdings">Cancel</a>
+      </div>
+    </div>
+  </div>
+</form>
+
+<template id="pb-row-tpl">
+  <tr class="pb-row">
+    <td>
+      <select name="kind" class="pb-kind">
+        <option value="asset">Asset</option>
+        <option value="cash">Cash</option>
+        <option value="liability">Liability</option>
+      </select>
+    </td>
+    <td><input name="symbol" class="pb-symbol" placeholder="AAPL" autocomplete="off" style="width:7rem"></td>
+    <td><input name="name" placeholder="Apple Inc. / Chase Checking" autocomplete="off"></td>
+    <td>
+      <select name="account_id">
+        <option value="">— unassigned —</option>
+        {% for a in accounts %}<option value="{{ a.account_id }}">{{ a.name }}{% if a.broker %} · {{ a.broker }}{% endif %}</option>{% endfor %}
+      </select>
+    </td>
+    <td><input name="quantity" type="number" step="any" class="pb-qty num" style="width:6.5rem"></td>
+    <td><input name="unit_cost" type="number" step="any" class="pb-cost num" style="width:6.5rem"></td>
+    <td><input name="amount" type="number" step="any" class="pb-amount num" style="width:7.5rem"></td>
+    <td><input name="currency" maxlength="3" list="ccy-list" placeholder="USD" style="width:4.5rem"></td>
+    <td><button type="button" class="btn btn-sm btn-danger pb-remove" title="Remove row">×</button></td>
+  </tr>
+</template>
+
+<script>
+(function () {
+  const tpl = document.getElementById("pb-row-tpl");
+  const rows = document.getElementById("pb-rows");
+
+  // Asset rows use quantity + unit cost; cash/liability rows use amount.
+  function applyKind(tr) {
+    const isAsset = tr.querySelector(".pb-kind").value === "asset";
+    tr.querySelector(".pb-symbol").disabled = !isAsset;
+    tr.querySelector(".pb-qty").disabled = !isAsset;
+    tr.querySelector(".pb-cost").disabled = !isAsset;
+    tr.querySelector(".pb-amount").disabled = isAsset;
+    [".pb-symbol", ".pb-qty", ".pb-cost"].forEach(s => {
+      tr.querySelector(s).style.opacity = isAsset ? "1" : ".4";
+    });
+    tr.querySelector(".pb-amount").style.opacity = isAsset ? ".4" : "1";
+  }
+
+  function addRow() {
+    const tr = tpl.content.firstElementChild.cloneNode(true);
+    tr.querySelector(".pb-kind").addEventListener("change", () => applyKind(tr));
+    tr.querySelector(".pb-remove").addEventListener("click", () => {
+      tr.remove();
+      if (!rows.children.length) addRow();
+    });
+    rows.appendChild(tr);
+    applyKind(tr);
+  }
+
+  document.getElementById("pb-add").addEventListener("click", addRow);
+
+  // Re-enable disabled inputs on submit so their (empty) values still post —
+  // keeps every row's parallel field lists aligned by index server-side.
+  document.getElementById("pb-form").addEventListener("submit", () => {
+    rows.querySelectorAll("input, select").forEach(el => { el.disabled = false; });
+  });
+
+  for (let i = 0; i < 5; i++) addRow();  // start with a few blank rows
+})();
+</script>
+
+{% endblock %}

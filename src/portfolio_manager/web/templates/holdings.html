@@ -8,8 +8,11 @@
     <span class="eyebrow">What you own{% if scope_kind != 'all' %} · {{ scope_label }}{% endif %}</span>
     <h1>Holdings</h1>
   </div>
-  <p class="lede">Every position you hold, grouped by account → asset class → instrument type.
-    Values come from the latest snapshot in {{ base_currency }}. Subtotals roll up at each level.</p>
+  <div style="display:flex;align-items:end;gap:.5rem">
+    <p class="lede" style="margin-right:1rem">Every position you hold, grouped by account → asset class →
+      instrument type. Values come from the latest snapshot in {{ base_currency }}.</p>
+    <a class="btn btn-sm" href="/position-builder">+ Position builder</a>
+  </div>
 </div>
 
 <form method="get" class="toolbar bare" style="margin-bottom:1rem">
