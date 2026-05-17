@@ -2,9 +2,18 @@
 {% block title %}Performance{% endblock %}
 
 {% block head_extra %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/date-fns@3.6.0/cdn.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+{# Chart libraries are vendored locally (web/static/vendor/) by start.py so the
+   page works offline. If the vendored files are absent, fall back to the CDN. #}
+<script src="/static/vendor/chart.umd.min.js"></script>
+<script src="/static/vendor/date-fns.min.js"></script>
+<script src="/static/vendor/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script>
+if (!window.Chart) {
+  document.write('<scr' + 'ipt src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"><\/scr' + 'ipt>');
+  document.write('<scr' + 'ipt src="https://cdn.jsdelivr.net/npm/date-fns@3.6.0/cdn.min.js"><\/scr' + 'ipt>');
+  document.write('<scr' + 'ipt src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"><\/scr' + 'ipt>');
+}
+</script>
 {% endblock %}
 
 {% block content %}
@@ -173,16 +182,19 @@
 <script>
 (function () {
   const PALETTE = ["#1E40AF","#0E7490","#166534","#92400E","#7C2D12","#6B21A8","#1F2937","#9CA3AF","#DC2626","#B45309"];
-  Chart.defaults.font.family = "Inter, sans-serif";
-  Chart.defaults.font.size = 11;
-  Chart.defaults.color = "#6B6B65";
+  const HAS_CHART = typeof window.Chart !== "undefined";
+  if (HAS_CHART) {
+    Chart.defaults.font.family = "Inter, sans-serif";
+    Chart.defaults.font.size = 11;
+    Chart.defaults.color = "#6B6B65";
+  }
 
   let activePeriod = "ytd";
   let activeRebase = false;
   let ddChart = null, cfChart = null, compareChart = null;
 
   function fmtPct(v, digits) {
-    digits = digits == null ? 2 : digits;
+    digits = digits == null ? 3 : digits;
     if (v == null) return "—";
     const sign = v > 0 ? "+" : "";
     return sign + (v * 100).toFixed(digits) + "%";
@@ -193,6 +205,15 @@
     catch (_e) { return v.toFixed(0) + " " + ccy; }
   }
   function fmtNumber(v) { return v == null ? "—" : v.toLocaleString(undefined, { maximumFractionDigits: 2 }); }
+
+  function chartUnavailable(canvasId) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || !canvas.parentElement) return;
+    canvas.parentElement.innerHTML =
+      '<div class="muted" style="display:flex;align-items:center;justify-content:center;'
+      + 'height:100%;min-height:140px;font-size:13px;text-align:center;padding:1rem">'
+      + 'Chart library could not load — the metrics above are unaffected.</div>';
+  }
 
   function commonOpts(ccy) {
     return {
@@ -236,6 +257,8 @@
     document.getElementById("kpi-var").textContent = "VaR 95% " + (r.var_95_monthly != null ? fmtPct(r.var_95_monthly) : "—");
     document.getElementById("kpi-beta").textContent = r.beta != null ? r.beta.toFixed(2) : "—";
     document.getElementById("kpi-corr").textContent = "corr " + (r.correlation != null ? r.correlation.toFixed(2) : "—") + (r.benchmark_name ? ` · vs ${r.benchmark_name}` : "");
+
+    if (!HAS_CHART) { chartUnavailable("dd-chart"); chartUnavailable("cf-chart"); return; }
 
     // Drawdown chart
     const ddSeries = await fetch("/api/timeseries/drawdown?" + new URLSearchParams({ currency: ccy, period: activePeriod })).then(r => r.json());
@@ -299,6 +322,7 @@
     return Array.from(document.querySelectorAll(".series-toggle:checked")).map(c => c.value);
   }
   async function loadCompare() {
+    if (!HAS_CHART) { chartUnavailable("compare-chart"); return; }
     const series = getSelected();
     const ccy = document.getElementById("currency-select").value;
     if (!series.length) {
