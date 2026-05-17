@@ -13,7 +13,9 @@ class Lot:
     qty: float
     unit_cost: float          # in the asset's currency
     cost_known: bool = True   # False for opening_balance with no recorded price
-    fx_to_base: float | None = None  # FX rate (asset ccy → base) pinned at acquisition
+    fx_to_base: float | None = None      # FX rate (asset ccy → base) pinned at acquisition
+    market_index_level: float | None = None  # market index level pinned at acquisition
+    sector_index_level: float | None = None  # sector index level pinned at acquisition
 
 
 @dataclass
@@ -73,7 +75,7 @@ class CostBasisService:
         rows = self.db.fetchall_dict(
             f"""
             SELECT transaction_date, transaction_type, quantity, price, amount, fees,
-                   fx_rate_to_base
+                   fx_rate_to_base, market_index_level, sector_index_level
               FROM transactions
              WHERE {' AND '.join(clauses)}
              ORDER BY transaction_date ASC, created_at ASC
@@ -110,9 +112,13 @@ class CostBasisService:
                 if not cost_known:
                     incomplete = True
                 fx = r.get("fx_rate_to_base")
+                mkt = r.get("market_index_level")
+                sec = r.get("sector_index_level")
                 lots.append(Lot(
                     acquired=t_date, qty=qty, unit_cost=unit_cost, cost_known=cost_known,
                     fx_to_base=float(fx) if fx is not None else None,
+                    market_index_level=float(mkt) if mkt is not None else None,
+                    sector_index_level=float(sec) if sec is not None else None,
                 ))
 
             elif t_type == "sell":

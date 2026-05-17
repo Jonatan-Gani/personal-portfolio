@@ -35,6 +35,7 @@ from ..services import (
     MarketsService,
     PerformanceService,
     PortfolioService,
+    ReturnSplitService,
     ReturnsService,
     RiskService,
     SnapshotDiffService,
@@ -60,6 +61,7 @@ class Container:
     income: IncomeService
     accrual: AccrualService
     inception: InceptionService
+    return_split: ReturnSplitService
     risk: RiskService
     markets: MarketsService
     asset_lookup: AssetLookupService
@@ -132,6 +134,11 @@ def build_container(config: AppConfig, db: Database) -> Container:
         fx=fx_service, price_provider=price_provider, assets=asset_repo,
         history=price_history, base_currency=config.reporting.base_currency,
     )
+    return_split_service = ReturnSplitService(
+        cost_basis=cost_basis_service, fx=fx_service, price_provider=price_provider,
+        history=price_history, portfolio=portfolio,
+        base_currency=config.reporting.base_currency,
+    )
     markets_service = MarketsService(provider=price_provider, cache=price_cache, cache_ttl_minutes=60)
     asset_lookup_service = AssetLookupService()
 
@@ -152,6 +159,7 @@ def build_container(config: AppConfig, db: Database) -> Container:
         income=income_service,
         accrual=accrual,
         inception=inception_service,
+        return_split=return_split_service,
         risk=risk_service,
         markets=markets_service,
         asset_lookup=asset_lookup_service,

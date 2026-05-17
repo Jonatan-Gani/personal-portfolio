@@ -457,3 +457,24 @@ def test_default_indices_by_currency_and_sector():
                market_index_symbol="^NDX")
     assign_default_indices(a2)
     assert a2.market_index_symbol == "^NDX"
+
+
+# =========================================================== Return split (4-way)
+
+def test_split_unit_is_exact_and_sums_to_total():
+    from portfolio_manager.services.return_split import split_unit
+    u = split_unit(p0=100, f0=1.0, p1=130, f1=1.1, m0=1000, m1=1100, s0=500, s1=600)
+    assert u.total == pytest.approx(43.0)        # 130*1.1 - 100*1.0
+    assert u.currency == pytest.approx(10.0)     # 100*(1.1-1.0)
+    assert u.market == pytest.approx(11.0)       # 100*(1100/1000-1)*1.1
+    assert u.sector == pytest.approx(11.0)       # 100*(600/500-1100/1000)*1.1
+    assert u.currency + u.market + u.sector + u.pick == pytest.approx(u.total)
+    assert u.complete is True
+
+
+def test_split_unit_degrades_without_index_data():
+    from portfolio_manager.services.return_split import split_unit
+    u = split_unit(100, 1.0, 130, 1.1, None, None, None, None)
+    assert u.market == 0.0 and u.sector == 0.0
+    assert u.complete is False
+    assert u.currency + u.pick == pytest.approx(u.total)

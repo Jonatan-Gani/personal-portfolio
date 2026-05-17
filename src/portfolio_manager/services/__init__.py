@@ -11,6 +11,7 @@ from .income import IncomeService
 from .markets import MarketsService
 from .performance import PerformanceService
 from .portfolio import PortfolioService
+from .return_split import ReturnSplitService
 from .returns import ReturnsService
 from .risk import RiskService
 from .snapshot import SnapshotService
@@ -30,6 +31,7 @@ __all__ = [
     "MarketsService",
     "PerformanceService",
     "PortfolioService",
+    "ReturnSplitService",
     "ReturnsService",
     "RiskService",
     "SnapshotDiffService",
