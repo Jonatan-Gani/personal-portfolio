@@ -409,3 +409,25 @@ def test_position_builder_creates_opening_balances(db):
     holdings = c.holdings.at()
     assert list(holdings.asset_quantities.values()) == [50.0]
     assert list(holdings.cash_balances.values()) == [25000.0]
+
+
+# =========================================================== FX backfill
+
+def test_backfill_transaction_fx(services):
+    """Transactions recorded without a pinned FX rate get one filled in."""
+    from portfolio_manager.services.fx import backfill_transaction_fx
+
+    tx = services["tx_repo"]
+    for ccy in ("EUR", "USD", "GBP"):
+        tx.insert(Transaction(
+            transaction_date=date(2025, 1, 1), transaction_type=TransactionType.BUY,
+            entity_kind=PositionKind.ASSET, entity_id="A",
+            quantity=1, price=1, amount=1, currency=ccy))
+    assert all(t.fx_rate_to_base is None for t in tx.list_all())
+
+    res = backfill_transaction_fx(tx, services["fx"], "USD")
+    assert res == {"pending": 3, "filled": 3, "skipped": 0}
+    assert all(t.fx_rate_to_base is not None for t in tx.list_all())
+
+    # Idempotent — a second run finds nothing pending.
+    assert backfill_transaction_fx(tx, services["fx"], "USD")["pending"] == 0

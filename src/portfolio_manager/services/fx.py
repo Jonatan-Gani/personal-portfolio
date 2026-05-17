@@ -7,6 +7,7 @@ from ..domain.exceptions import FXRateUnavailable
 from ..domain.models import FXRate, Transaction
 from ..providers.base import FXProvider
 from ..repositories.prices import FXRateCache
+from ..repositories.transactions import TransactionRepository
 
 log = logging.getLogger(__name__)
 
@@ -79,3 +80,21 @@ class FXService:
             )
             tx.fx_rate_to_base = None
         return tx
+
+
+def backfill_transaction_fx(
+    transactions: TransactionRepository,
+    fx: FXService,
+    base_currency: str,
+) -> dict:
+    """Fill `fx_rate_to_base` on transactions that lack it — rows recorded before
+    FX capture existed. Each gets the historical rate at its own date. Rows whose
+    rate cannot be resolved are left untouched. Returns counts for reporting."""
+    pending = [t for t in transactions.list_all() if t.fx_rate_to_base is None]
+    filled = 0
+    for tx in pending:
+        fx.stamp_transaction(tx, base_currency)
+        if tx.fx_rate_to_base is not None:
+            transactions.update(tx)
+            filled += 1
+    return {"pending": len(pending), "filled": filled, "skipped": len(pending) - filled}
