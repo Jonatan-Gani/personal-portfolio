@@ -165,14 +165,3 @@ def test_markets_watchlist_iterates_items(db):
     assert out[1].change_pct == pytest.approx(-0.01)
 
 
-# ---------------------------------------------------------------- transactions friendly form
-
-def test_transaction_route_split_entity_parser():
-    from portfolio_manager.web.routes.transactions import _split_entity
-    from portfolio_manager.domain.enums import PositionKind
-    kind, eid = _split_entity("asset:abc-123")
-    assert kind is PositionKind.ASSET and eid == "abc-123"
-    kind, eid = _split_entity("cash:c1")
-    assert kind is PositionKind.CASH
-    kind, eid = _split_entity("liability:l1")
-    assert kind is PositionKind.LIABILITY

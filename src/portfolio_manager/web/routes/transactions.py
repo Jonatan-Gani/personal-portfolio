@@ -24,20 +24,6 @@ def _parse_date(s: str | None) -> date | None:
     return date.fromisoformat(s)
 
 
-def _split_entity(entity: str) -> tuple[PositionKind, str]:
-    """Parse the legacy `<kind>:<id>` form value used by the update endpoint."""
-    if ":" not in entity:
-        raise HTTPException(400, "entity must be in the form '<kind>:<id>'")
-    kind_str, _, eid = entity.partition(":")
-    try:
-        kind = PositionKind(kind_str)
-    except ValueError as e:
-        raise HTTPException(400, f"unknown entity kind {kind_str!r}") from e
-    if not eid:
-        raise HTTPException(400, "entity id missing")
-    return kind, eid
-
-
 def _kind_from_type(ttype: TransactionType, kind_override: str | None) -> PositionKind:
     """Most transaction types determine their entity kind. Only opening_balance is
     ambiguous and needs the caller to supply one."""
@@ -285,7 +271,6 @@ def update_transaction(
     transaction_id: str,
     transaction_date: str = Form(...),
     transaction_type: str = Form(...),
-    entity: str = Form(...),
     quantity: float | None = Form(None),
     price: float | None = Form(None),
     amount: float = Form(0.0),
@@ -293,16 +278,15 @@ def update_transaction(
     fees: float = Form(0.0),
     notes: str | None = Form(None),
 ):
+    """Edit a transaction in place. The position it belongs to is fixed — to
+    move a transaction to a different position, delete and re-record it."""
     c = request.app.state.container
     try:
         existing = c.transactions_repo.get(transaction_id)
     except NotFoundError as e:
         raise HTTPException(404, str(e)) from e
-    kind, eid = _split_entity(entity)
     existing.transaction_date = date.fromisoformat(transaction_date)
     existing.transaction_type = TransactionType(transaction_type)
-    existing.entity_kind = kind
-    existing.entity_id = eid
     existing.quantity = quantity
     existing.price = price
     existing.amount = amount

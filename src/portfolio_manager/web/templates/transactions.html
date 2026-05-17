@@ -335,10 +335,48 @@
         </td>
         <td class="num faint">{{ "{:,.2f}".format(tx.fees) if tx.fees else '—' }}</td>
         <td class="muted">{{ tx.notes or '—' }}</td>
-        <td>
+        <td style="white-space:nowrap">
+          <button type="button" class="btn btn-sm tx-edit-btn" data-tx="{{ tx.transaction_id }}">Edit</button>
           <form method="post" action="/transactions/{{ tx.transaction_id }}/delete" class="inline"
                 onsubmit="return confirm('Delete this transaction? Holdings will recompute.')">
             <button class="btn btn-sm btn-danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+      <tr class="tx-edit-row" id="edit-{{ tx.transaction_id }}" hidden>
+        <td colspan="11" style="background:var(--surface-alt)">
+          <form method="post" action="/transactions/{{ tx.transaction_id }}/update" class="field-row" style="padding:.5rem">
+            <label class="field">Date
+              <input type="date" name="transaction_date" value="{{ tx.transaction_date }}" required>
+            </label>
+            <label class="field">Type
+              <select name="transaction_type">
+                {% for t in transaction_types %}<option value="{{ t }}" {% if t == tx.transaction_type.value %}selected{% endif %}>{{ t | humanize }}</option>{% endfor %}
+              </select>
+            </label>
+            <label class="field">Quantity
+              <input type="number" step="any" name="quantity" value="{{ tx.quantity if tx.quantity is not none else '' }}">
+            </label>
+            <label class="field">Price
+              <input type="number" step="any" name="price" value="{{ tx.price if tx.price is not none else '' }}">
+            </label>
+            <label class="field">Amount
+              <input type="number" step="any" name="amount" value="{{ tx.amount }}">
+            </label>
+            <label class="field">Currency
+              <input name="currency" maxlength="3" list="ccy-list" value="{{ tx.currency }}" required>
+            </label>
+            <label class="field">Fees
+              <input type="number" step="any" name="fees" value="{{ tx.fees }}">
+            </label>
+            <label class="field span-2">Notes
+              <input name="notes" value="{{ tx.notes or '' }}">
+            </label>
+            <div class="span-4" style="display:flex;gap:.5rem;align-items:center">
+              <button class="btn btn-sm btn-primary">Save changes</button>
+              <button type="button" class="btn btn-sm btn-ghost tx-edit-cancel" data-tx="{{ tx.transaction_id }}">Cancel</button>
+              <span class="hint">The position stays the same — to move this transaction, delete and re-record it.</span>
+            </div>
           </form>
         </td>
       </tr>
@@ -348,5 +386,24 @@
     </tbody>
   </table>
 </div>
+
+<script>
+// Inline editing: the Edit button reveals a per-row edit form.
+(function () {
+  function editRow(id) { return document.getElementById("edit-" + id); }
+  document.querySelectorAll(".tx-edit-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const row = editRow(btn.dataset.tx);
+      if (row) row.hidden = !row.hidden;
+    });
+  });
+  document.querySelectorAll(".tx-edit-cancel").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const row = editRow(btn.dataset.tx);
+      if (row) row.hidden = true;
+    });
+  });
+})();
+</script>
 
 {% endblock %}
