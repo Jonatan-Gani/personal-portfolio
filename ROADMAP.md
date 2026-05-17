@@ -30,20 +30,22 @@ current state:
 - **Currency-attributed returns** — cost basis in the base currency from pinned
   FX rates, and an unrealized-return split into price effect vs FX effect, shown
   on the Holdings page.
+- **Position builder** — a `/position-builder` page for bulk-entering holdings
+  you already own.
+- **Inline transaction editing** — edit a transaction in place from its row.
+- **Cost-basis lots in the UI** — click a Holdings row to drill into its FIFO
+  lots and realized sales.
+- **Sortino & VaR** — added to the Performance page's risk metrics.
+- **`portfolio backfill-fx`** — fills FX rates on transactions recorded before
+  FX capture existed.
 
 ---
 
 ## 1. Onboarding & data entry
 
-- **Position builder** — a guided wizard for standing up an initial portfolio:
-  pick accounts, add holdings with current quantity + average cost, and have it
-  emit the right `opening_balance` transactions behind the scenes. Lowers the
-  barrier for users who don't want to back-enter years of trades.
 - **Broker-specific CSV import templates** — recognise Schwab / Fidelity /
   Trading 212 / IBKR Flex export formats and map them automatically, instead of
   the current generic column mapping.
-- **Inline transaction editing** — the update endpoint exists but has no UI;
-  add an edit form so corrections don't require delete-and-re-add.
 - **Undo** — a short-lived undo for transaction delete/edit.
 
 ## 2. Simulation & planning
@@ -66,11 +68,8 @@ current state:
 - **Per-reporting-currency cost basis** — currency attribution currently works in
   the base currency. Extend it to other reporting currencies by pinning their
   rates per transaction too, or by chaining historical base→ccy rates.
-- **Risk metrics** — volatility, Sharpe, Sortino, max drawdown, value-at-risk.
 - **Benchmark depth** — multiple benchmarks at once, alpha / beta / tracking
   error, not just a single comparison line.
-- **Cost-basis lots in the UI** — surface the FIFO lots, realized vs unrealized
-  gains per lot (the `CostBasisService` already computes them).
 - **Tax reports** — realized-gains and dividend/interest summaries per tax year,
   exportable.
 - **Income projection** — a forward 12-month dividend/interest estimate and a
@@ -87,9 +86,6 @@ current state:
   the app's derived holdings (flag mismatches, optionally emit corrections).
 - **Historical price backfill** — bulk-fetch past prices so old snapshots and
   returns can be enriched/recomputed.
-- **FX backfill for legacy transactions** — FX capture is forward-looking;
-  transactions recorded before it have `fx_rate_to_base = NULL`. A
-  `portfolio backfill-fx` command would fill them from historical FX.
 - **Corporate actions** — auto-ingest splits and dividends rather than entering
   them by hand.
 - **Stale-data warnings** — flag any position priced from an old or failed quote
@@ -140,13 +136,13 @@ current state:
 ## Suggested next slice
 
 If picking a handful to do next, these give the most value for the least
-architectural risk and build on what just landed:
+architectural risk:
 
-1. **Position builder** — directly addresses the biggest remaining onboarding
-   friction; the example portfolio shows the target end state.
-2. **Inline transaction editing** — the update endpoint exists but has no UI.
-3. **Cost-basis lots in the UI** — the FIFO lots and per-lot P&L are already
-   computed; surface them next to the new return-attribution table.
-4. **Risk metrics** — volatility, Sharpe, drawdown on the Performance page.
-5. **FX backfill** — a `portfolio backfill-fx` command so currency attribution
-   covers transactions recorded before FX capture.
+1. **Broker-specific CSV import templates** — recognise common broker exports so
+   importing real history is not a manual column-mapping chore.
+2. **Tax reports** — realized-gains and dividend/interest summaries per tax year.
+3. **Simulation / paper accounts** — model "what if" holdings without polluting
+   real net worth.
+4. **Provider config in the UI** — make the Settings provider switch apply live
+   and add an options editor (IBKR host/port).
+5. **Authentication** — the first real step toward a multi-user deployment.

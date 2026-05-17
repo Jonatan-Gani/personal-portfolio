@@ -137,6 +137,7 @@ The `portfolio` command is installed with the package (`pyproject.toml` → `por
 |---------|-------------|
 | `portfolio init-db` | Apply schema / migrations, seed the default benchmark. `--skip-seed` to skip seeding. |
 | `portfolio snapshot` | Take a snapshot now. `--note "..."` to annotate it. |
+| `portfolio backfill-fx` | Fill FX rates on transactions recorded before FX capture existed. |
 | `portfolio list-snapshots` | List recent snapshots. `--limit N`. |
 | `portfolio list-assets` | List registered assets. |
 | `portfolio backup` | Copy the live DuckDB file to a timestamped backup. `--out PATH`. |
