@@ -182,6 +182,16 @@ def list_transactions(
     liabilities = c.portfolio.list_liabilities()
     accounts = c.accounts_repo.list_active()
 
+    # Known positions for the form's auto-fill (symbol/name → currency, account).
+    known_positions = (
+        [{"kind": "asset", "symbol": a.symbol or "", "name": a.name,
+          "currency": a.currency, "account_id": a.account_id or ""} for a in assets]
+        + [{"kind": "cash", "symbol": "", "name": ca.account_name,
+            "currency": ca.currency, "account_id": ca.account_id or ""} for ca in cash_accounts]
+        + [{"kind": "liability", "symbol": "", "name": li.name,
+            "currency": li.currency, "account_id": li.account_id or ""} for li in liabilities]
+    )
+
     return request.app.state.templates.TemplateResponse(
         request,
         "transactions.html",
@@ -194,6 +204,7 @@ def list_transactions(
                 "since": since, "until": until, "account": account,
             },
             "transaction_types": [t.value for t in TransactionType],
+            "known_positions": known_positions,
             "assets": assets,
             "cash_accounts": cash_accounts,
             "liabilities": liabilities,

@@ -196,10 +196,14 @@
               </td>
               <td class="num">{% if r.quantity is not none %}{{ "{:,.4f}".format(r.quantity) }}{% else %}<span class="faint">—</span>{% endif %}</td>
               <td class="mono">{{ r.currency }}</td>
-              <td class="num">{% if r.price_local is not none %}{{ "{:,.4f}".format(r.price_local) }}{% else %}<span class="faint">—</span>{% endif %}</td>
+              <td class="num">{% if r.price_local is not none %}{{ "{:,.4f}".format(r.price_local) }}{% else %}<span class="faint" title="no price available — quantity is still tracked">price unknown</span>{% endif %}</td>
               <td class="num">
+                {% if r.priced %}
                 <div>{{ "{:,.0f}".format(r.value_local) }} <span class="faint">{{ r.currency }}</span></div>
                 <div class="meta mono"><strong>{{ "{:,.0f}".format(r.value_base) }}</strong> {{ base_currency }}</div>
+                {% else %}
+                <div class="faint">—</div>
+                {% endif %}
               </td>
               <td>
                 <a class="btn btn-sm btn-ghost"

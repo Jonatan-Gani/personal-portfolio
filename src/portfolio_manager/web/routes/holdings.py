@@ -2,10 +2,34 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
+from ..._clock import utcnow
 from ...domain.enums import AssetClass, InstrumentType
-from ...services.scope import parse_scope, scope_filter_sql, scope_join_sql
+from ...services.scope import parse_scope
 
 router = APIRouter()
+
+
+def _in_scope(account_id: str | None, account_ids: list[str] | None) -> bool:
+    """Whether a position's account passes the current scope filter."""
+    if account_ids is None:
+        return True
+    if account_ids == ["__unassigned__"]:
+        return account_id is None
+    return account_id in account_ids
+
+
+def _asset_price(c, asset, snap_price: dict[str, float]) -> float | None:
+    """Best-effort current price: last snapshot price, else a live quote, else
+    the latest manual override, else None (the quantity is still shown)."""
+    if asset.asset_id in snap_price:
+        return snap_price[asset.asset_id]
+    if asset.symbol:
+        try:
+            return c.snapshot.price_provider.get_price(asset.symbol).price
+        except Exception:
+            pass
+    ov = c.manual_prices_repo.latest_before(asset.asset_id, utcnow())
+    return ov.price if ov else None
 
 
 def _build_position_tree(c, base_ccy: str, account_ids: list[str] | None) -> dict:
@@ -28,42 +52,77 @@ def _build_position_tree(c, base_ccy: str, account_ids: list[str] | None) -> dic
     Cash and liabilities are also placed under their account, into synthetic
     "Cash" and "Liabilities" class buckets. Holdings with NULL account_id land
     under a synthetic "Unassigned" account.
+
+    Positions are derived live from the transaction log (HoldingsService) — a
+    holding appears the moment its transaction is recorded. Prices are
+    best-effort; a holding with no available price still shows its quantity.
     """
+    state = c.holdings.at()
+    assets = {a.asset_id: a for a in c.portfolio.list_assets(include_inactive=True)}
+    cash = {x.cash_id: x for x in c.portfolio.list_cash(include_inactive=True)}
+    liabs = {x.liability_id: x for x in c.portfolio.list_liabilities(include_inactive=True)}
+
+    # Last known price per asset, from the most recent snapshot.
+    snap_price: dict[str, float] = {}
     latest = c.snapshots_repo.latest()
-    if latest is None:
-        return {"accounts": [], "totals": {"assets": 0.0, "cash": 0.0, "liabilities": 0.0, "net_worth": 0.0}}
-    snap_id = latest.snapshot_id
+    if latest is not None:
+        for row in c.db.fetchall_dict(
+            "SELECT entity_id, price_local FROM snapshot_positions "
+            "WHERE snapshot_id = ? AND position_kind = 'asset'",
+            [latest.snapshot_id],
+        ):
+            if row["price_local"] is not None:
+                snap_price[row["entity_id"]] = float(row["price_local"])
 
-    scope_where, scope_params = scope_filter_sql(account_ids)
-    joins = scope_join_sql() if account_ids is not None else ""
-    extra_select = (
-        ", COALESCE(_a.account_id, _c.account_id, _l.account_id) AS account_id"
-        if account_ids is not None else
-        ", NULL AS account_id"
-    )
+    def _fx(ccy: str) -> float:
+        try:
+            return c.fx.rate(ccy, base_ccy)
+        except Exception:
+            return 1.0
 
-    # We always need the per-row account_id for the tree, even when scope is "all".
-    rows = c.db.fetchall_dict(
-        f"""
-        SELECT p.position_kind, p.entity_id, p.name, p.instrument_type, p.asset_class,
-               p.currency, p.country, p.quantity, p.price_local, p.value_local, p.tags,
-               COALESCE(v.value, 0) AS value_base,
-               COALESCE(_a.account_id, _c.account_id, _l.account_id) AS account_id
-          FROM snapshot_positions p
-          LEFT JOIN snapshot_position_values v
-            ON v.snapshot_id = p.snapshot_id
-           AND v.position_kind = p.position_kind
-           AND v.entity_id = p.entity_id
-           AND v.currency = ?
-          LEFT JOIN assets        _a ON _a.asset_id     = p.entity_id AND p.position_kind = 'asset'
-          LEFT JOIN cash_holdings _c ON _c.cash_id      = p.entity_id AND p.position_kind = 'cash'
-          LEFT JOIN liabilities   _l ON _l.liability_id = p.entity_id AND p.position_kind = 'liability'
-         WHERE p.snapshot_id = ?
-           {scope_where}
-         ORDER BY p.position_kind, value_base DESC
-        """,
-        [base_ccy, snap_id, *scope_params],
-    )
+    rows: list[dict] = []
+
+    for aid, qty in state.asset_quantities.items():
+        a = assets.get(aid)
+        if abs(qty) < 1e-9 or a is None or not _in_scope(a.account_id, account_ids):
+            continue
+        price = _asset_price(c, a, snap_price)
+        priced = price is not None
+        value_local = qty * price if priced else 0.0
+        rows.append({
+            "position_kind": "asset", "entity_id": aid, "name": a.name,
+            "currency": a.currency, "country": a.country, "quantity": qty,
+            "price_local": price, "priced": priced, "value_local": value_local,
+            "value_base": value_local * _fx(a.currency), "tags": a.tags,
+            "instrument_type": a.instrument_type.value,
+            "asset_class": a.asset_class.value, "account_id": a.account_id,
+        })
+
+    for cid, bal in state.cash_balances.items():
+        x = cash.get(cid)
+        if abs(bal) < 1e-9 or x is None or not _in_scope(x.account_id, account_ids):
+            continue
+        rows.append({
+            "position_kind": "cash", "entity_id": cid, "name": x.account_name,
+            "currency": x.currency, "country": x.country, "quantity": None,
+            "price_local": None, "priced": True, "value_local": bal,
+            "value_base": bal * _fx(x.currency), "tags": x.tags,
+            "instrument_type": "cash", "asset_class": "cash",
+            "account_id": x.account_id,
+        })
+
+    for lid, principal in state.liability_principals.items():
+        x = liabs.get(lid)
+        if abs(principal) < 1e-9 or x is None or not _in_scope(x.account_id, account_ids):
+            continue
+        rows.append({
+            "position_kind": "liability", "entity_id": lid, "name": x.name,
+            "currency": x.currency, "country": None, "quantity": None,
+            "price_local": None, "priced": True, "value_local": principal,
+            "value_base": principal * _fx(x.currency), "tags": x.tags,
+            "instrument_type": x.liability_type.value, "asset_class": "other",
+            "account_id": x.account_id,
+        })
 
     # Account metadata (resolve names, brokers, groups, colours).
     acct_meta: dict[str | None, dict] = {}
@@ -124,6 +183,7 @@ def _build_position_tree(c, base_ccy: str, account_ids: list[str] | None) -> dic
             "country": r["country"],
             "quantity": float(r["quantity"]) if r["quantity"] is not None else None,
             "price_local": float(r["price_local"]) if r["price_local"] is not None else None,
+            "priced": r.get("priced", True),
             "value_local": float(r["value_local"] or 0),
             "value_base": float(r["value_base"] or 0),
             "tags": r["tags"] or [],
@@ -142,7 +202,7 @@ def _build_position_tree(c, base_ccy: str, account_ids: list[str] | None) -> dic
     for aid, ab in tree.items():
         meta = acct_meta.get(aid, acct_meta[None])
         classes_out = []
-        for cls_key, cls in ab["classes"].items():
+        for cls in ab["classes"].values():
             types_out = sorted(cls["types"].values(), key=lambda t: -t["total"])
             classes_out.append({
                 "key": cls["key"], "label": cls["label"],
