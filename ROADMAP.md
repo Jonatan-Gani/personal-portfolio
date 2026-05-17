@@ -8,6 +8,23 @@ Nothing here is committed work — it is a menu of directions.
 
 ---
 
+## Recently shipped
+
+Done and in the codebase — listed so the rest of the roadmap reads against the
+current state:
+
+- **Transaction-first entry** — recording a transaction creates its position
+  automatically; no more pre-registering an asset.
+- **Interactive Brokers price provider** — `ibkr`, backed by a running
+  TWS / IB Gateway.
+- **Multi-source asset lookup** — OpenFIGI + SEC EDGAR + yfinance merged behind
+  `AssetLookupService` for ISIN ⇄ ticker resolution.
+- **Transaction-time FX capture** — every transaction pins `fx_rate_to_base`,
+  the rate at its inception.
+- **`start.py`** — one-command cross-platform setup + run.
+
+---
+
 ## 1. Onboarding & data entry
 
 - **Example portfolio** — a one-click "load demo data" that seeds a realistic
@@ -17,8 +34,9 @@ Nothing here is committed work — it is a menu of directions.
   pick accounts, add holdings with current quantity + average cost, and have it
   emit the right `opening_balance` transactions behind the scenes. Lowers the
   barrier for users who don't want to back-enter years of trades.
-- **Ticker search / autocomplete** — type "apple", get `AAPL` with the right
-  name, currency and exchange pre-filled from a symbol-lookup provider.
+- **Lookup-assisted entry** — wire `AssetLookupService` into the transaction
+  form: type a ticker or ISIN, get name / currency / exchange / classification
+  pre-filled from OpenFIGI + EDGAR.
 - **Broker-specific CSV import templates** — recognise Schwab / Fidelity /
   Trading 212 / IBKR Flex export formats and map them automatically, instead of
   the current generic column mapping.
@@ -43,13 +61,15 @@ Nothing here is committed work — it is a menu of directions.
 
 ## 3. Analytics & reporting
 
-- **Proper return math** — time-weighted return (TWR) and money-weighted return
-  (IRR / XIRR), so performance is correct in the presence of cash flows.
+- **Currency-attributed returns** — now that each transaction pins its inception
+  FX rate, split a position's return into the price move vs the FX move, and
+  report cost basis in any reporting currency at the rate that was true when
+  each lot was bought. This is the natural payoff of the FX-capture work.
 - **Risk metrics** — volatility, Sharpe, Sortino, max drawdown, value-at-risk.
 - **Benchmark depth** — multiple benchmarks at once, alpha / beta / tracking
   error, not just a single comparison line.
-- **Cost-basis lots** — FIFO / LIFO / specific-lot accounting with realized vs
-  unrealized gains broken out per lot.
+- **Cost-basis lots in the UI** — surface the FIFO lots, realized vs unrealized
+  gains per lot (the `CostBasisService` already computes them).
 - **Tax reports** — realized-gains and dividend/interest summaries per tax year,
   exportable.
 - **Income projection** — a forward 12-month dividend/interest estimate and a
@@ -67,13 +87,17 @@ Nothing here is committed work — it is a menu of directions.
   the app's derived holdings (flag mismatches, optionally emit corrections).
 - **Historical price backfill** — bulk-fetch past prices so old snapshots and
   returns can be enriched/recomputed.
+- **FX backfill for legacy transactions** — FX capture is forward-looking;
+  transactions recorded before it have `fx_rate_to_base = NULL`. A
+  `portfolio backfill-fx` command would fill them from historical FX.
 - **Corporate actions** — auto-ingest splits and dividends rather than entering
   them by hand.
 - **Stale-data warnings** — flag any position priced from an old or failed quote
   so snapshot values aren't silently wrong.
-- **Provider config in the UI** — make the Settings provider selector actually
-  apply without a restart, and add an options editor (e.g. IBKR host/port) so
-  switching provider doesn't require editing `config.yaml`.
+- **Provider config in the UI** — the Settings provider dropdown is now
+  registry-driven, but selecting a provider needs an app restart to take effect
+  and there is no options editor (e.g. IBKR host/port). Make the selection apply
+  live and editable.
 
 ## 5. Asset coverage
 
@@ -95,7 +119,8 @@ Nothing here is committed work — it is a menu of directions.
 - **Audit log** — record who changed what and when.
 - **Scheduled + off-site backups** — automate the existing `backup` command and
   push copies somewhere durable.
-- **Secrets management** — proper handling of provider API keys and tokens.
+- **Secrets management** — proper handling of provider API keys and tokens
+  (OpenFIGI key, IBKR credentials).
 - **Read-only sharing** — share a view of a portfolio without edit rights.
 
 ## 7. Platform & operations
@@ -112,13 +137,15 @@ Nothing here is committed work — it is a menu of directions.
 
 ---
 
-## Suggested first slice
+## Suggested next slice
 
 If picking a handful to do next, these give the most value for the least
-architectural risk and play to what already exists:
+architectural risk and build directly on what just landed:
 
-1. **Example portfolio** — trivial to seed, makes the app demo-able instantly.
-2. **Position builder** — directly addresses the biggest onboarding friction.
-3. **Inline transaction editing** — the backend is already there.
-4. **Charts on the dashboard** — the snapshot data is already structured for it.
-5. **TWR / XIRR returns** — turns the Performance page into something accurate.
+1. **Currency-attributed returns** — consume the new per-transaction FX rate;
+   turns the Performance page into something genuinely accurate.
+2. **Lookup-assisted entry** — wire `AssetLookupService` into the transaction
+   form; the service is built, it just is not connected to the main form yet.
+3. **Example portfolio** — trivial to seed, makes the app demo-able instantly.
+4. **Position builder** — directly addresses the biggest onboarding friction.
+5. **Charts on the dashboard** — the snapshot data is already structured for it.
