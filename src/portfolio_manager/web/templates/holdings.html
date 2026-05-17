@@ -55,70 +55,30 @@
   </div>
 </div>
 
-<div class="grid-2col" style="grid-template-columns:1fr 1fr">
-  <details class="drawer">
-    <summary>+ Add investment</summary>
-    <div class="drawer-body">
-      <form method="post" action="/assets" class="field-row">
-        <div class="lookup-row" data-form="add-investment">
-          <label class="field">Ticker <input name="symbol" list="symbol-list" placeholder="e.g. VOO, AAPL.L"></label>
-          <label class="field">ISIN <input name="isin" maxlength="12" placeholder="optional"></label>
-          <button type="button" class="btn lookup-btn">Look up &amp; auto-fill</button>
-          <span class="lookup-status muted" style="font-size:12px"></span>
-        </div>
-        <label class="field">Name <input name="name" required></label>
-        <label class="field">Instrument
-          <select name="instrument_type">
-            {% for t in instrument_types %}<option value="{{ t }}">{{ t | humanize }}</option>{% endfor %}
-          </select>
-        </label>
-        <label class="field">Asset class
-          <select name="asset_class">
-            {% for t in asset_classes %}<option value="{{ t }}">{{ t | humanize }}</option>{% endfor %}
-          </select>
-        </label>
-        <label class="field">Currency <input name="currency" required maxlength="3" list="ccy-list" placeholder="USD"></label>
-        <label class="field">Country <input name="country" maxlength="2" list="country-list" placeholder="US"></label>
-        <label class="field">Sector <input name="sector"></label>
-        <label class="field">Price provider
-          <select name="price_provider">
-            <option value="">use default</option>
-            <option value="yfinance">yfinance</option>
-            <option value="mock">mock</option>
-          </select>
-        </label>
-        {{ account_select(accounts) }}
-        <label class="field">Tags <input name="tags" placeholder="comma, separated"></label>
-        <label class="field span-2">Notes <input name="notes"></label>
-        <button class="btn btn-primary span-4" style="justify-self:start">Add investment</button>
-      </form>
-    </div>
-  </details>
-
-  <details class="drawer">
-    <summary>+ Add cash account</summary>
-    <div class="drawer-body">
-      <form method="post" action="/cash" class="field-row">
-        <label class="field span-2">Account name <input name="account_name" required></label>
-        <label class="field">Currency <input name="currency" required maxlength="3" list="ccy-list" placeholder="USD"></label>
-        <label class="field">Country <input name="country" maxlength="2" list="country-list"></label>
-        <label class="field">Opening balance
-          <input name="opening_balance" type="number" step="any" placeholder="0">
-          <span class="hint">Creates an "Opening balance" transaction. Leave blank to skip.</span>
-        </label>
-        {{ account_select(accounts) }}
-        <label class="field">Tags <input name="tags" placeholder="comma, separated"></label>
-        <label class="field span-2">Notes <input name="notes"></label>
-        <button class="btn btn-primary span-4" style="justify-self:start">Add cash account</button>
-      </form>
-    </div>
-  </details>
-</div>
+<details class="drawer">
+  <summary>+ Add cash account</summary>
+  <div class="drawer-body">
+    <form method="post" action="/cash" class="field-row">
+      <label class="field span-2">Account name <input name="account_name" required></label>
+      <label class="field">Currency <input name="currency" required maxlength="3" list="ccy-list" placeholder="USD"></label>
+      <label class="field">Country <input name="country" maxlength="2" list="country-list"></label>
+      <label class="field">Opening balance
+        <input name="opening_balance" type="number" step="any" placeholder="0">
+        <span class="hint">Creates an "Opening balance" transaction. Leave blank to skip.</span>
+      </label>
+      {{ account_select(accounts) }}
+      <label class="field">Tags <input name="tags" placeholder="comma, separated"></label>
+      <label class="field span-2">Notes <input name="notes"></label>
+      <button class="btn btn-primary span-4" style="justify-self:start">Add cash account</button>
+    </form>
+  </div>
+</details>
 
 {% if not tree.accounts %}
 <div class="empty">
   <h2>No positions yet in this scope.</h2>
-  <p>Add an investment or cash account above, then record an opening balance or a buy on the
+  <p>Add a cash account above, or an investment with the <a href="/position-builder">Position builder</a>,
+    then record an opening balance or a buy on the
     <a href="/transactions">transactions</a> page. The first dashboard load takes an automatic snapshot.</p>
 </div>
 {% endif %}
@@ -344,8 +304,6 @@
     });
 })();
 </script>
-
-{% include "_asset_lookup_js.html" %}
 
 <style>
   .acct-dot { display:inline-block; width:10px; height:10px; border-radius:3px; }
