@@ -425,4 +425,18 @@ MIGRATIONS: list[tuple[int, str]] = [
         CREATE INDEX IF NOT EXISTS idx_assets_isin ON assets(isin);
         """,
     ),
+    (
+        8,
+        """
+        -- FX rate captured at transaction inception. `fx_rate_to_base` converts
+        -- one unit of the transaction's `currency` into `fx_base_currency` as of
+        -- `transaction_date`. Pinning the rate here lets cost basis and returns
+        -- be computed against the rate that was true when the transaction
+        -- happened, rather than today's rate. NULL on rows recorded before this
+        -- migration, or when the FX provider was unreachable at insert time.
+        ALTER TABLE transactions ADD COLUMN IF NOT EXISTS fx_rate_to_base DOUBLE;
+        ALTER TABLE transactions ADD COLUMN IF NOT EXISTS fx_base_currency VARCHAR;
+        """,
+    ),
 ]
+

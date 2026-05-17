@@ -231,3 +231,49 @@ def test_income_ttm_collects_dividends(services, db):
     rep = income.report("USD")
     assert rep.ttm_total_report == pytest.approx(100.0)
     assert any(r.entity_id == a.asset_id and r.payments == 2 for r in rep.rows)
+
+
+# =========================================================== Transaction FX
+
+def test_stamp_transaction_pins_inception_rate(services):
+    """A transaction in a non-base currency gets the FX rate at its date pinned."""
+    fx = services["fx"]
+    tx = Transaction(
+        transaction_date=date(2025, 1, 15),
+        transaction_type=TransactionType.BUY,
+        entity_kind=PositionKind.ASSET,
+        entity_id="x", quantity=10.0, price=100.0, amount=1000.0, currency="EUR",
+    )
+    fx.stamp_transaction(tx, "USD")
+    assert tx.fx_base_currency == "USD"
+    # MockFxProvider: 1 EUR = 1/0.92 USD
+    assert tx.fx_rate_to_base == pytest.approx(1 / 0.92, rel=1e-9)
+
+
+def test_stamp_transaction_same_currency_is_one(services):
+    fx = services["fx"]
+    tx = Transaction(
+        transaction_date=date(2025, 1, 15),
+        transaction_type=TransactionType.DEPOSIT,
+        entity_kind=PositionKind.CASH,
+        entity_id="c", amount=500.0, currency="USD",
+    )
+    fx.stamp_transaction(tx, "USD")
+    assert tx.fx_rate_to_base == 1.0
+
+
+def test_stamped_rate_survives_repo_round_trip(services):
+    fx, tx_repo = services["fx"], services["tx_repo"]
+    p = services["portfolio"]
+    a = _open_asset(p, tx_repo, name="EuroCo", symbol="EC", qty=1.0, currency="EUR")
+    tx = Transaction(
+        transaction_date=date(2025, 3, 1),
+        transaction_type=TransactionType.BUY,
+        entity_kind=PositionKind.ASSET,
+        entity_id=a.asset_id, quantity=5.0, price=20.0, amount=100.0, currency="EUR",
+    )
+    fx.stamp_transaction(tx, "USD")
+    tx_repo.insert(tx)
+    got = tx_repo.get(tx.transaction_id)
+    assert got.fx_rate_to_base == pytest.approx(tx.fx_rate_to_base)
+    assert got.fx_base_currency == "USD"

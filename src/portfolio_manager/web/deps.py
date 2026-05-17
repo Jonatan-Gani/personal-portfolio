@@ -99,7 +99,10 @@ def build_container(config: AppConfig, db: Database) -> Container:
         price_cache=price_cache,
         default_price_provider=price_provider,
     )
-    accrual = AccrualService(db=db, liabilities=liab_repo, transactions=tx_repo)
+    accrual = AccrualService(
+        db=db, liabilities=liab_repo, transactions=tx_repo,
+        fx=fx_service, base_currency=config.reporting.base_currency,
+    )
     snapshot_service = SnapshotService(
         portfolio=portfolio,
         fx=fx_service,

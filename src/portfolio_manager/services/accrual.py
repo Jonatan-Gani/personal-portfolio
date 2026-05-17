@@ -3,6 +3,10 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .fx import FXService
 
 from .._clock import utcnow
 from ..db.connection import Database
@@ -42,10 +46,14 @@ class AccrualService:
         db: Database,
         liabilities: LiabilityRepository,
         transactions: TransactionRepository,
+        fx: FXService | None = None,
+        base_currency: str = "USD",
     ):
         self.db = db
         self.liabilities = liabilities
         self.transactions = transactions
+        self.fx = fx
+        self.base_currency = base_currency
 
     def accrue_all(self, as_of: date | None = None) -> list[AccrualResult]:
         as_of = as_of or utcnow().date()
@@ -110,6 +118,8 @@ class AccrualService:
             fees=0.0,
             notes=f"{ACCRUAL_NOTE_PREFIX} · {days}d @ {liab.interest_rate * 100:.3f}% APR",
         )
+        if self.fx is not None:
+            self.fx.stamp_transaction(tx, self.base_currency)
         self.transactions.insert(tx)
         log.info(
             "accrued %.2f %s on liability %s over %d days",

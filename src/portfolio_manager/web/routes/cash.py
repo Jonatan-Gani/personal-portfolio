@@ -47,7 +47,7 @@ def create_cash(
     )
     c.portfolio.add_cash(cash)
     if opening_balance is not None and opening_balance != 0:
-        c.transactions_repo.insert(Transaction(
+        tx = Transaction(
             transaction_date=date.today(),
             transaction_type=TransactionType.OPENING_BALANCE,
             entity_kind=PositionKind.CASH,
@@ -55,7 +55,9 @@ def create_cash(
             amount=opening_balance,
             currency=currency,
             notes="opening balance set on account creation",
-        ))
+        )
+        c.fx.stamp_transaction(tx, c.config.reporting.base_currency)
+        c.transactions_repo.insert(tx)
         if c.config.auto_snapshot.enabled:
             c.snapshot.take(notes="auto · after cash account created")
     return RedirectResponse("/cash", status_code=303)

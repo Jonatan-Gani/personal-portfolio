@@ -270,6 +270,7 @@ def create_transaction(
         fees=fees,
         notes=notes,
     )
+    c.fx.stamp_transaction(tx, c.config.reporting.base_currency)
     c.transactions_repo.insert(tx)
     if c.config.auto_snapshot.enabled:
         c.snapshot.take(notes="auto · after transaction")
@@ -308,6 +309,8 @@ def update_transaction(
     existing.currency = currency
     existing.fees = fees
     existing.notes = notes
+    # Currency or date may have changed — re-pin the inception FX rate.
+    c.fx.stamp_transaction(existing, c.config.reporting.base_currency)
     c.transactions_repo.update(existing)
     if c.config.auto_snapshot.enabled:
         c.snapshot.take(notes="auto · after transaction edit")

@@ -16,13 +16,15 @@ class TransactionRepository:
             """
             INSERT INTO transactions (
                 transaction_id, transaction_date, transaction_type, entity_kind, entity_id,
-                quantity, price, amount, currency, fees, notes, created_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                quantity, price, amount, currency, fees, notes,
+                fx_rate_to_base, fx_base_currency, created_at
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             [
                 tx.transaction_id, tx.transaction_date, tx.transaction_type.value,
                 tx.entity_kind.value, tx.entity_id, tx.quantity, tx.price, tx.amount,
-                tx.currency, tx.fees, tx.notes, tx.created_at,
+                tx.currency, tx.fees, tx.notes,
+                tx.fx_rate_to_base, tx.fx_base_currency, tx.created_at,
             ],
         )
         return tx
@@ -40,13 +42,15 @@ class TransactionRepository:
                 amount = ?,
                 currency = ?,
                 fees = ?,
-                notes = ?
+                notes = ?,
+                fx_rate_to_base = ?,
+                fx_base_currency = ?
             WHERE transaction_id = ?
             """,
             [
                 tx.transaction_date, tx.transaction_type.value, tx.entity_kind.value,
                 tx.entity_id, tx.quantity, tx.price, tx.amount, tx.currency, tx.fees,
-                tx.notes, tx.transaction_id,
+                tx.notes, tx.fx_rate_to_base, tx.fx_base_currency, tx.transaction_id,
             ],
         )
         return tx
