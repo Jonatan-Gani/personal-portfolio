@@ -59,7 +59,11 @@
         </label>
 
         <label class="field" id="tx-symbol-field">Symbol
-          <input name="symbol" id="tx-symbol" placeholder="e.g. AAPL" autocomplete="off">
+          <span style="display:flex;gap:.4rem">
+            <input name="symbol" id="tx-symbol" placeholder="e.g. AAPL or an ISIN" autocomplete="off" style="flex:1">
+            <button type="button" class="btn btn-sm" id="tx-lookup-btn" title="Look up name & currency">Look up</button>
+          </span>
+          <span class="hint" id="tx-lookup-hint">Optional: resolve the name and currency from OpenFIGI / EDGAR.</span>
         </label>
 
         <label class="field" id="tx-name-field">Name
@@ -121,6 +125,10 @@
   const KIND = document.getElementById("tx-kind");
   const SYMBOL_FIELD = document.getElementById("tx-symbol-field");
   const NAME_FIELD = document.getElementById("tx-name-field");
+  const SYMBOL = document.getElementById("tx-symbol");
+  const NAME = document.getElementById("tx-name");
+  const LOOKUP_BTN = document.getElementById("tx-lookup-btn");
+  const LOOKUP_HINT = document.getElementById("tx-lookup-hint");
   const QTY = document.getElementById("tx-qty");
   const PRICE = document.getElementById("tx-price");
   const AMOUNT = document.getElementById("tx-amount");
@@ -198,6 +206,43 @@
       SUMMARY.textContent = "";
     }
   }
+
+  // Lookup-assisted entry: resolve the typed symbol/ISIN against the asset
+  // lookup service and fill Name + Currency. Explicit (button-driven) — it
+  // never fires on its own, and only fills fields the user left blank.
+  const _ISIN_RE = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/;
+
+  async function runLookup() {
+    const q = (SYMBOL.value || "").trim().toUpperCase();
+    if (!q) { LOOKUP_HINT.textContent = "Type a ticker or ISIN first."; return; }
+    const param = _ISIN_RE.test(q) ? "isin" : "symbol";
+    LOOKUP_BTN.disabled = true;
+    LOOKUP_HINT.textContent = "Looking up…";
+    try {
+      const resp = await fetch(`/api/asset-lookup?${param}=${encodeURIComponent(q)}`);
+      const r = await resp.json();
+      if (!r.ok) {
+        LOOKUP_HINT.textContent = r.error || "No match found.";
+        return;
+      }
+      if (r.symbol && param === "isin") SYMBOL.value = r.symbol;
+      if (r.name && !NAME.value.trim()) NAME.value = r.name;
+      if (r.currency && !CURRENCY.value.trim()) {
+        CURRENCY.value = r.currency;
+        CURRENCY.dataset.userTouched = "1";
+      }
+      const bits = [r.name, r.currency, r.exchange].filter(Boolean).join(" · ");
+      LOOKUP_HINT.innerHTML = `<span style="color:var(--pos,#2a7)">✓</span> ${bits}`
+        + (r.source ? ` <span class="faint">(${r.source})</span>` : "")
+        + (r.error ? ` <span style="color:var(--neg,#c33)">— ${r.error}</span>` : "");
+    } catch (e) {
+      LOOKUP_HINT.textContent = "Lookup failed — fill the fields manually.";
+    } finally {
+      LOOKUP_BTN.disabled = false;
+    }
+  }
+
+  LOOKUP_BTN.addEventListener("click", runLookup);
 
   TYPE.addEventListener("change", () => { applyTypeVisibility(); recompute(); });
   KIND.addEventListener("change", () => { applyTypeVisibility(); recompute(); });
